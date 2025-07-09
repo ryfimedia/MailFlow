@@ -115,7 +115,7 @@ export default function ContactsPage() {
       return;
     }
     const newList: ContactList = {
-      id: new Date().getTime().toString(),
+      id: crypto.randomUUID(),
       name: newListName,
       count: 0,
       createdAt: new Date().toISOString().split('T')[0],
@@ -189,7 +189,7 @@ export default function ContactsPage() {
         }
         targetListName = uploadNewListName;
         const newList: ContactList = {
-            id: new Date().getTime().toString(),
+            id: crypto.randomUUID(),
             name: targetListName,
             count: newContactsCount,
             createdAt: new Date().toISOString().split('T')[0],
@@ -224,7 +224,7 @@ export default function ContactsPage() {
     }
     // Add mock contacts
     for (let i = 0; i < newContactsCount; i++) {
-        contactsByList[targetListId].push({ id: `csv_${Date.now()}_${i}`, email: `csv.contact.${Date.now()}.${i}@example.com`, firstName: 'CSV', lastName: `User ${i}`, status: 'Subscribed' });
+        contactsByList[targetListId].push({ id: `csv_${Date.now()}_${i}`, email: `csv.contact.${Date.now()}.${i}@example.com`, firstName: 'CSV', lastName: `User ${i}`, status: 'Subscribed', subscribedAt: new Date().toISOString() });
     }
     localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
 
@@ -285,8 +285,8 @@ export default function ContactsPage() {
                           const Icon = listIcons[list.id] || (list.isMasterList ? listIcons['all'] : listIcons.default);
                           return (
                             <div key={list.id} className="relative group">
-                                <Link href={`/contacts/${list.id}`} className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                                    <Card className={`h-full transition-all group-hover:shadow-md ${list.isSystemList ? 'bg-muted/50' : 'group-hover:border-primary/50'}`}>
+                                <Card className={`h-full transition-all group-hover:shadow-md ${list.isSystemList ? 'bg-muted/50' : 'group-hover:border-primary/50'}`}>
+                                    <Link href={`/contacts/${list.id}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-lg">
                                         <CardHeader className="flex flex-row items-start justify-between pb-2">
                                             <CardTitle className="text-base font-medium">{list.name}</CardTitle>
                                         </CardHeader>
@@ -296,11 +296,11 @@ export default function ContactsPage() {
                                                 {list.count.toLocaleString()}
                                             </div>
                                             <p className="text-xs text-muted-foreground">
-                                            {list.isSystemList ? list.createdAt : `Created on ${new Date(list.createdAt).toLocaleDateString('en-US')}`}
+                                            {list.isSystemList ? list.createdAt : `Created on ${new Date(list.createdAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}`}
                                             </p>
                                         </CardContent>
-                                    </Card>
-                                </Link>
+                                    </Link>
+                                </Card>
                                 {!list.isSystemList && (
                                     <div className="absolute top-2 right-2">
                                         <DropdownMenu>

@@ -55,6 +55,7 @@ const allContactLists = [
 
 const mailingLists = allContactLists.filter(list => !list.isSystemList);
 const CAMPAIGNS_KEY = 'campaigns';
+const SETTINGS_KEY = 'appSettings';
 
 const campaignFormSchema = z.object({
   name: z.string().min(3, { message: "Campaign name must be at least 3 characters." }).or(z.literal("")),
@@ -65,7 +66,7 @@ const campaignFormSchema = z.object({
         if (form.getValues('name') === '' && form.getValues('recipientListId') === '' && form.getValues('subject') === '') {
             return true;
         }
-        const textContent = html.replace(/<[^>]*>/g, '').trim();
+        const textContent = (html || '').replace(/<[^>]*>/g, '').trim();
         return textContent.length >= 20;
     },
     { message: "Email body must contain at least 20 characters of text." }
@@ -232,8 +233,10 @@ export default function NewCampaignPage() {
 
   const handleClearFormatting = () => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+    if (!selection || selection.rangeCount === 0 || !selection.toString().trim()) return;
+    
     document.execCommand('removeFormat');
+    
     const range = selection.getRangeAt(0);
     let container = range.commonAncestorContainer;
     if (container.nodeType === Node.TEXT_NODE) { container = container.parentElement!; }
@@ -346,8 +349,9 @@ export default function NewCampaignPage() {
     }
     const styledBlock = target.closest<HTMLElement>('[data-styled-block="true"]');
     if (styledBlock) {
-      e.preventDefault();
       setSelectedElement(styledBlock);
+    } else {
+      setSelectedElement(null);
     }
   };
 
@@ -388,13 +392,27 @@ export default function NewCampaignPage() {
     const status = statusOverride ? 'Draft' : (data.scheduledAt ? "Scheduled" : "Sent");
     
     let finalEmailBody = data.emailBody || '';
+
     if (status === 'Sent' || status === 'Scheduled') {
+        let companyName = "Your Company LLC";
+        let companyAddress = "123 Main St, Anytown, USA 12345";
+        
+        try {
+            const settingsRaw = localStorage.getItem(SETTINGS_KEY);
+            if (settingsRaw) {
+                const settings = JSON.parse(settingsRaw);
+                companyName = settings.profile?.companyName || companyName;
+                companyAddress = settings.profile?.address || companyAddress;
+            }
+        } catch (e) {
+            console.error("Could not parse settings for footer.", e)
+        }
+        
         const footer = `
             <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-              <p style="margin: 0 0 5px 0;">RyFi Media LLC. Copyright 2025, All rights reserved.</p>
-              <p style="margin: 0 0 5px 0;">Our mailing address is PO Box 157, Colton, OR 97017.</p>
-              <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
-              <a href="#unsubscribe" style="color: #888888; text-decoration: underline;">Unsubscribe from future emails</a>
+              <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+              <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+              <a href="#unsubscribe" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
             </div>
         `;
         finalEmailBody += footer;
@@ -410,8 +428,8 @@ export default function NewCampaignPage() {
       scheduledAt: data.scheduledAt ? data.scheduledAt.toISOString() : undefined,
       status,
       sentDate: status === 'Sent' ? new Date().toISOString() : (data.scheduledAt ? data.scheduledAt.toISOString() : undefined),
-      openRate: '-',
-      clickRate: '-',
+      openRate: status === 'Sent' ? `${(Math.random() * (40 - 15) + 15).toFixed(1)}%` : '-',
+      clickRate: status === 'Sent' ? `${(Math.random() * (8 - 1) + 1).toFixed(1)}%` : '-',
     };
 
     try {
@@ -438,11 +456,23 @@ export default function NewCampaignPage() {
     const isValid = await form.trigger();
     if (isValid) {
       onSubmit(form.getValues());
+    } else {
+      toast({
+        variant: "destructive",
+        title: "Incomplete Campaign",
+        description: "Please fill out all required fields before sending or scheduling.",
+      });
     }
   };
   
   const handleSaveDraft = () => {
-    onSubmit(form.getValues(), 'Draft');
+    const data = form.getValues();
+    // For drafts, we don't need validation except maybe a name
+    if (!data.name) {
+      data.name = "Untitled Draft";
+      form.setValue("name", data.name);
+    }
+    onSubmit(data, 'Draft');
   };
 
   const pageTitle = campaignId ? "Edit Campaign" : "New Campaign";
@@ -736,7 +766,7 @@ export default function NewCampaignPage() {
                                 onClick={handleEditorClick}
                                 className="email-editor min-h-[400px] w-full rounded-b-md border-0 p-4 text-base ring-offset-background text-black placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
-                                style={{ backgroundColor: emailBackgroundColor || '#ffffff' }}
+                                style={{ backgroundColor: '#ffffff' }}
                               />
                           </FormControl>
                         </div>
