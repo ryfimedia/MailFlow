@@ -16,8 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box } from "lucide-react";
-import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -109,7 +108,6 @@ const emojis = [
 ];
 
 export default function NewCampaignPage() {
-  const [isGenerating, setIsGenerating] = React.useState(false);
   const [date, setDate] = React.useState<Date>();
   const { toast } = useToast();
   const editorRef = React.useRef<HTMLDivElement>(null);
@@ -138,7 +136,6 @@ export default function NewCampaignPage() {
   });
 
   const emailBodyValue = form.watch("emailBody");
-  const emailBodyForAI = emailBodyValue.replace(/<[^>]+>/g, '');
 
   React.useEffect(() => {
     const templateContent = sessionStorage.getItem('selectedTemplateContent');
@@ -243,24 +240,6 @@ export default function NewCampaignPage() {
     
     setIsBlockStylePopoverOpen(false);
   };
-
-  async function handleGenerateSubject() {
-    if (!emailBodyForAI || emailBodyForAI.length < 20) {
-      form.setError("emailBody", { type: "manual", message: "Please write some email content (at least 20 characters) first to generate a subject." });
-      return;
-    }
-    setIsGenerating(true);
-    try {
-      const result = await generateSubjectLine({ emailBody: emailBodyForAI });
-      form.setValue("subject", result.subjectLine);
-      form.clearErrors("subject");
-    } catch (error) {
-      console.error("Failed to generate subject line:", error);
-      form.setError("subject", { type: "manual", message: "AI generation failed. Please try again." });
-    } finally {
-      setIsGenerating(false);
-    }
-  }
 
   function handleEmojiClick(emoji: string) {
     applyFormat('insertText', emoji);
@@ -420,15 +399,9 @@ export default function NewCampaignPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Subject</FormLabel>
-                      <div className="flex gap-2">
-                        <FormControl>
-                          <Input placeholder="Your email subject line" {...field} />
-                        </FormControl>
-                        <Button type="button" variant="outline" onClick={handleGenerateSubject} disabled={isGenerating}>
-                          <Wand2 className="mr-2 h-4 w-4" />
-                          {isGenerating ? "Generating..." : "AI Generate"}
-                        </Button>
-                      </div>
+                      <FormControl>
+                        <Input placeholder="Your email subject line" {...field} />
+                      </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
