@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush } from "lucide-react";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -329,27 +329,6 @@ export default function NewCampaignPage() {
       setIsButtonPopoverOpen(true);
       return;
     }
-    
-    const block = target.closest<HTMLDivElement>('[data-styled-block="true"]');
-    if (block) {
-      e.preventDefault();
-      setSelectedElement(block);
-      
-      setBlockBgColor(block.style.backgroundColor ? rgbToHex(block.style.backgroundColor) : '#f9f9f9');
-      setBlockPadding(block.style.padding ? parseInt(block.style.padding, 10) : 20);
-
-      if (block.style.border) {
-        setBlockBorderWidth(parseInt(block.style.borderWidth, 10) || 1);
-        setBlockBorderStyle(block.style.borderStyle || 'solid');
-        setBlockBorderColor(rgbToHex(block.style.borderColor) || '#cccccc');
-      } else {
-        setBlockBorderWidth(1);
-        setBlockBorderStyle('solid');
-        setBlockBorderColor('#cccccc');
-      }
-      setIsBlockStylePopoverOpen(true);
-      return;
-    }
   };
 
   const handlePopoverOpenChange = (open: boolean, setter: React.Dispatch<React.SetStateAction<boolean>>) => {
@@ -595,6 +574,7 @@ export default function NewCampaignPage() {
                             
                             <div className="flex items-center gap-1">
                                 <Button variant="outline" size="icon" type="button" title="Undo" className="h-8 w-8" onClick={() => applyFormat('undo')}><Undo className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Clear Formatting" className="h-8 w-8" onClick={() => applyFormat('removeFormat')}><RemoveFormatting className="h-4 w-4" /></Button>
                             </div>
 
                             <div className="h-6 border-l border-border mx-1"></div>
