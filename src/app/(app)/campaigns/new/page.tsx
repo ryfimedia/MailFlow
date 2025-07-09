@@ -297,8 +297,24 @@ export default function NewCampaignPage() {
   };
 
   const handleImageInsert = () => {
-    const url = window.prompt("Enter image URL:");
-    if (url) { applyFormat("insertImage", url); }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+      const target = e.target as HTMLInputElement;
+      if (target.files && target.files.length > 0) {
+        const file = target.files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result;
+          if (dataUrl) {
+            applyFormat('insertImage', dataUrl as string);
+          }
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
   };
   
   const handleInsertDivider = (height: number, color: string) => {
