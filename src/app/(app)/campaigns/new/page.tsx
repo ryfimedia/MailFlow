@@ -16,16 +16,32 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { UploadCloud, Wand2, Calendar, Send } from "lucide-react";
+import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import Link from "next/link";
+
+// Mock data, in a real app this would come from an API
+const contactLists = [
+  { id: '1', name: 'Newsletter Subscribers (1,250)', value: 'list_1' },
+  { id: '2', name: 'Q2 Webinar Attendees (320)', value: 'list_2' },
+  { id: '3', name: 'High-Value Customers (85)', value: 'list_3' },
+  { id: '4', name: 'New Signups (Last 30 Days) (450)', value: 'list_4' },
+];
 
 const campaignFormSchema = z.object({
-  recipientsFile: z.any().optional(),
+  recipientListId: z.string({ required_error: "Please select a recipient list." }),
   subject: z.string().min(5, { message: "Subject must be at least 5 characters." }),
   emailBody: z.string().min(20, { message: "Email body must be at least 20 characters." }),
   scheduledAt: z.date().optional(),
@@ -63,10 +79,6 @@ export default function NewCampaignPage() {
       const result = await generateSubjectLine({ emailBody: emailBodyForAI });
       form.setValue("subject", result.subjectLine);
       form.clearErrors("subject");
-      toast({
-        title: "Subject line generated!",
-        description: "The AI has created a new subject line for you.",
-      });
     } catch (error) {
       console.error("Failed to generate subject line:", error);
       form.setError("subject", { type: "manual", message: "AI generation failed. Please try again." });
@@ -110,7 +122,7 @@ export default function NewCampaignPage() {
             </Popover>
             <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
               <Send className="mr-2 h-4 w-4" />
-              Send Now
+              {date ? "Schedule" : "Send Now"}
             </Button>
           </div>
         </div>
@@ -149,13 +161,21 @@ export default function NewCampaignPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Body</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Write your email here. A rich text editor will be implemented here."
-                          className="min-h-[400px]"
-                          {...field}
-                        />
-                      </FormControl>
+                        <div className="rounded-md border">
+                          <div className="flex items-center gap-1 border-b p-2 bg-muted">
+                            <Button variant="outline" size="icon" type="button" title="Bold"><Bold className="h-4 w-4" /></Button>
+                            <Button variant="outline" size="icon" type="button" title="Italic"><Italic className="h-4 w-4" /></Button>
+                            <Button variant="outline" size="icon" type="button" title="Underline"><Underline className="h-4 w-4" /></Button>
+                            <Button variant="outline" size="icon" type="button" title="Insert Image"><ImageIcon className="h-4 w-4" /></Button>
+                          </div>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Write your email here..."
+                              className="min-h-[400px] border-0 rounded-t-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                              {...field}
+                            />
+                          </FormControl>
+                        </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -168,27 +188,33 @@ export default function NewCampaignPage() {
             <Card>
               <CardHeader>
                 <CardTitle>Recipients</CardTitle>
-                <CardDescription>Upload a CSV with 'email' and 'name' columns.</CardDescription>
+                <CardDescription>Select the contact list to send this campaign to.</CardDescription>
               </CardHeader>
               <CardContent>
                 <FormField
                   control={form.control}
-                  name="recipientsFile"
+                  name="recipientListId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormControl>
-                        <div className="flex items-center justify-center w-full">
-                            <label htmlFor="dropzone-file" className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-secondary hover:bg-muted">
-                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                    <UploadCloud className="w-10 h-10 mb-3 text-muted-foreground" />
-                                    <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
-                                    <p className="text-xs text-muted-foreground">CSV file up to 10MB</p>
-                                </div>
-                                <Input id="dropzone-file" type="file" className="hidden" accept=".csv" onChange={(e) => field.onChange(e.target.files)} />
-                            </label>
-                        </div> 
-                      </FormControl>
-                       <FormMessage />
+                      <FormLabel>Contact List</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a list" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {contactLists.map((list) => (
+                            <SelectItem key={list.id} value={list.value}>
+                              {list.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        You can manage your lists on the <Link href="/contacts" className="underline">Contacts page</Link>.
+                      </FormDescription>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
