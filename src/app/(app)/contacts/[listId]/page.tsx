@@ -46,42 +46,56 @@ const contactLists = [
 const contactsByList: { [key: string]: any[] } = {
     '1': Array.from({ length: 25 }, (_, i) => ({
         id: `contact_${i + 1}`,
-        name: `Subscriber ${i + 1}`,
+        firstName: `Subscriber`,
+        lastName: `${i + 1}`,
         email: `subscriber.${i + 1}@example.com`,
+        phone: `555-010${i % 10}`,
+        company: `Company ${String.fromCharCode(65 + (i % 26))}`,
         status: 'Subscribed',
         subscribedAt: '2023-10-01',
     })),
     '2': Array.from({ length: 10 }, (_, i) => ({
         id: `webinar_${i + 1}`,
-        name: `Attendee ${i + 1}`,
+        firstName: `Attendee`,
+        lastName: `${i + 1}`,
         email: `attendee.${i + 1}@example.com`,
+        phone: `555-011${i % 10}`,
+        company: `Corp ${String.fromCharCode(65 + (i % 26))}`,
         status: 'Subscribed',
         subscribedAt: '2023-06-21',
     })),
     '3': Array.from({ length: 5 }, (_, i) => ({
         id: `customer_${i + 1}`,
-        name: `Valued Customer ${i + 1}`,
+        firstName: `Valued`,
+        lastName: `Customer ${i + 1}`,
         email: `customer.${i + 1}@example.com`,
+        phone: `555-012${i % 10}`,
+        company: `Client Inc. ${String.fromCharCode(65 + (i % 26))}`,
         status: 'Subscribed',
         subscribedAt: '2023-09-02',
     })),
     '4': Array.from({ length: 15 }, (_, i) => ({
         id: `signup_${i + 1}`,
-        name: `New User ${i + 1}`,
+        firstName: `New`,
+        lastName: `User ${i + 1}`,
         email: `newuser.${i + 1}@example.com`,
+        phone: `555-013${i % 10}`,
+        company: `Startup ${String.fromCharCode(65 + (i % 26))}`,
         status: 'Subscribed',
         subscribedAt: '2023-09-15',
     })),
     'unsubscribes': Array.from({ length: 37 }, (_, i) => ({
         id: `unsub_${i + 1}`,
-        name: `Former Subscriber ${i + 1}`,
+        firstName: `Former`,
+        lastName: `Subscriber ${i + 1}`,
         email: `unsubscribed.${i + 1}@example.com`,
         status: 'Unsubscribed',
         subscribedAt: '2023-01-15',
     })),
     'bounces': Array.from({ length: 25 }, (_, i) => ({
         id: `bounce_${i + 1}`,
-        name: `Bounced User ${i + 1}`,
+        firstName: `Bounced`,
+        lastName: `User ${i + 1}`,
         email: `bounced.${i + 1}@example.com`,
         status: 'Bounced',
         subscribedAt: '2023-03-10',
@@ -90,15 +104,21 @@ const contactsByList: { [key: string]: any[] } = {
 
 type Contact = {
     id: string;
-    name: string;
+    firstName: string;
+    lastName: string;
     email: string;
+    phone?: string;
+    company?: string;
     status: string;
     subscribedAt: string;
 };
 
 const EditContactFormSchema = z.object({
-  name: z.string().min(2, { message: "Name must be at least 2 characters." }),
+  firstName: z.string().min(1, { message: "First name is required." }),
+  lastName: z.string().min(1, { message: "Last name is required." }),
   email: z.string().email({ message: "Please enter a valid email." }),
+  phone: z.string().optional(),
+  company: z.string().optional(),
 });
 
 type EditContactFormValues = z.infer<typeof EditContactFormSchema>;
@@ -122,8 +142,11 @@ export default function ContactListPage() {
     React.useEffect(() => {
         if (selectedContact) {
             form.reset({
-                name: selectedContact.name,
+                firstName: selectedContact.firstName,
+                lastName: selectedContact.lastName,
                 email: selectedContact.email,
+                phone: selectedContact.phone || '',
+                company: selectedContact.company || '',
             });
         }
     }, [selectedContact, form]);
@@ -142,7 +165,7 @@ export default function ContactListPage() {
 
         toast({
             title: "Contact Updated",
-            description: `${values.name}'s details have been saved.`,
+            description: `${values.firstName} ${values.lastName}'s details have been saved.`,
         });
         setIsEditDialogOpen(false);
         setSelectedContact(null);
@@ -214,10 +237,10 @@ export default function ContactListPage() {
                                     <TableRow key={contact.id}>
                                         {!list.isSystemList && (
                                             <TableCell>
-                                                <Checkbox aria-label={`Select ${contact.name}`} />
+                                                <Checkbox aria-label={`Select ${contact.firstName} ${contact.lastName}`} />
                                             </TableCell>
                                         )}
-                                        <TableCell className="font-medium">{contact.name}</TableCell>
+                                        <TableCell className="font-medium">{`${contact.firstName} ${contact.lastName}`}</TableCell>
                                         <TableCell>{contact.email}</TableCell>
                                         <TableCell>
                                             <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
@@ -253,24 +276,39 @@ export default function ContactListPage() {
                         <DialogHeader>
                             <DialogTitle>Edit contact</DialogTitle>
                             <DialogDescription>
-                            Update the details for {selectedContact?.name}. Click save when you're done.
+                            Update the details for {selectedContact?.firstName} {selectedContact?.lastName}. Click save when you're done.
                             </DialogDescription>
                         </DialogHeader>
                         <Form {...form}>
                             <form onSubmit={form.handleSubmit(handleEditSubmit)} className="space-y-4 py-4">
-                                <FormField
-                                    control={form.control}
-                                    name="name"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Name</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Contact's name" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <FormField
+                                        control={form.control}
+                                        name="firstName"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>First Name</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="John" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                    <FormField
+                                        control={form.control}
+                                        name="lastName"
+                                        render={({ field }) => (
+                                            <FormItem>
+                                                <FormLabel>Last Name</FormLabel>
+                                                <FormControl>
+                                                    <Input placeholder="Doe" {...field} />
+                                                </FormControl>
+                                                <FormMessage />
+                                            </FormItem>
+                                        )}
+                                    />
+                                </div>
                                 <FormField
                                     control={form.control}
                                     name="email"
@@ -279,6 +317,32 @@ export default function ContactListPage() {
                                             <FormLabel>Email</FormLabel>
                                             <FormControl>
                                                 <Input placeholder="contact@email.com" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="phone"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Phone</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="(555) 555-5555" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="company"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Company</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Acme Inc." {...field} />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
