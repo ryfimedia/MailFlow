@@ -4,7 +4,7 @@
 import React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, MoreVertical } from "lucide-react";
+import { ArrowLeft, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -26,6 +26,8 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -89,6 +91,8 @@ const contactsByList: { [key: string]: any[] } = {
         firstName: `Former`,
         lastName: `Subscriber ${i + 1}`,
         email: `unsubscribed.${i + 1}@example.com`,
+        phone: ``,
+        company: ``,
         status: 'Unsubscribed',
         subscribedAt: '2023-01-15',
     })),
@@ -97,6 +101,8 @@ const contactsByList: { [key: string]: any[] } = {
         firstName: `Bounced`,
         lastName: `User ${i + 1}`,
         email: `bounced.${i + 1}@example.com`,
+        phone: ``,
+        company: ``,
         status: 'Bounced',
         subscribedAt: '2023-03-10',
     })),
@@ -113,6 +119,18 @@ type Contact = {
     subscribedAt: string;
 };
 
+const columnConfig = [
+    { id: 'firstName', label: 'First Name' },
+    { id: 'lastName', label: 'Last Name' },
+    { id: 'email', label: 'Email' },
+    { id: 'phone', label: 'Phone' },
+    { id: 'company', label: 'Company' },
+    { id: 'status', label: 'Status' },
+    { id: 'subscribedAt', label: 'Date' },
+] as const;
+
+type ColumnId = typeof columnConfig[number]['id'];
+
 const EditContactFormSchema = z.object({
   firstName: z.string().min(1, { message: "First name is required." }),
   lastName: z.string().min(1, { message: "Last name is required." }),
@@ -122,6 +140,7 @@ const EditContactFormSchema = z.object({
 });
 
 type EditContactFormValues = z.infer<typeof EditContactFormSchema>;
+type SortConfig = { key: keyof Contact; direction: 'ascending' | 'descending' } | null;
 
 
 export default function ContactListPage() {
@@ -134,6 +153,17 @@ export default function ContactListPage() {
     
     const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
     const [selectedContact, setSelectedContact] = React.useState<Contact | null>(null);
+
+    const [sortConfig, setSortConfig] = React.useState<SortConfig>({ key: 'lastName', direction: 'ascending' });
+    const [visibleColumns, setVisibleColumns] = React.useState<Record<ColumnId, boolean>>({
+        firstName: true,
+        lastName: true,
+        email: true,
+        phone: false,
+        company: false,
+        status: true,
+        subscribedAt: true,
+    });
 
     const form = useForm<EditContactFormValues>({
         resolver: zodResolver(EditContactFormSchema),
@@ -170,6 +200,36 @@ export default function ContactListPage() {
         setIsEditDialogOpen(false);
         setSelectedContact(null);
     };
+
+    const requestSort = (key: keyof Contact) => {
+        let direction: 'ascending' | 'descending' = 'ascending';
+        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'ascending') {
+            direction = 'descending';
+        }
+        setSortConfig({ key, direction });
+    };
+
+    const sortedContacts = React.useMemo(() => {
+        let sortableItems = [...contacts];
+        if (sortConfig !== null) {
+            sortableItems.sort((a, b) => {
+                const aValue = a[sortConfig.key] || '';
+                const bValue = b[sortConfig.key] || '';
+                if (aValue < bValue) {
+                    return sortConfig.direction === 'ascending' ? -1 : 1;
+                }
+                if (aValue > bValue) {
+                    return sortConfig.direction === 'ascending' ? 1 : -1;
+                }
+                return 0;
+            });
+        }
+        return sortableItems;
+    }, [contacts, sortConfig]);
+
+    const toggleColumn = (columnId: ColumnId) => {
+        setVisibleColumns(prev => ({...prev, [columnId]: !prev[columnId]}));
+    }
     
     if (!list) {
         return (
@@ -194,6 +254,17 @@ export default function ContactListPage() {
         ? "This is a system-managed list. Contacts cannot be edited or removed."
         : `A list of all contacts in ${list.name}.`;
 
+    const renderSortArrow = (columnKey: keyof Contact) => {
+        if (sortConfig?.key !== columnKey) {
+            return <ArrowUpDown className="ml-2 h-4 w-4" />;
+        }
+        return sortConfig.direction === 'ascending' ? (
+            <ArrowUp className="ml-2 h-4 w-4" />
+        ) : (
+            <ArrowDown className="ml-2 h-4 w-4" />
+        );
+    };
+
     return (
         <>
             <div className="space-y-6">
@@ -209,8 +280,33 @@ export default function ContactListPage() {
 
                 <Card>
                     <CardHeader>
-                        <CardTitle>Subscribers</CardTitle>
-                        <CardDescription>{cardDescription}</CardDescription>
+                        <div className="flex items-start justify-between">
+                            <div>
+                                <CardTitle>Subscribers</CardTitle>
+                                <CardDescription>{cardDescription}</CardDescription>
+                            </div>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <Button variant="outline" className="ml-auto">
+                                        Columns <ChevronDown className="ml-2 h-4 w-4" />
+                                    </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                    <DropdownMenuLabel>Toggle columns</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    {columnConfig.map(col => (
+                                        <DropdownMenuCheckboxItem
+                                            key={col.id}
+                                            className="capitalize"
+                                            checked={visibleColumns[col.id]}
+                                            onCheckedChange={() => toggleColumn(col.id)}
+                                        >
+                                            {col.label}
+                                        </DropdownMenuCheckboxItem>
+                                    ))}
+                                </DropdownMenuContent>
+                            </DropdownMenu>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -221,10 +317,16 @@ export default function ContactListPage() {
                                             <Checkbox aria-label="Select all" />
                                         </TableHead>
                                     )}
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Date</TableHead>
+                                    {columnConfig.map(col => (
+                                        visibleColumns[col.id] && (
+                                            <TableHead key={col.id}>
+                                                <Button variant="ghost" onClick={() => requestSort(col.id)} className="px-2">
+                                                    {col.label}
+                                                    {renderSortArrow(col.id)}
+                                                </Button>
+                                            </TableHead>
+                                        )
+                                    ))}
                                     {!list.isSystemList && (
                                         <TableHead>
                                             <span className="sr-only">Actions</span>
@@ -233,19 +335,24 @@ export default function ContactListPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {contacts.map((contact) => (
+                                {sortedContacts.map((contact) => (
                                     <TableRow key={contact.id}>
                                         {!list.isSystemList && (
                                             <TableCell>
                                                 <Checkbox aria-label={`Select ${contact.firstName} ${contact.lastName}`} />
                                             </TableCell>
                                         )}
-                                        <TableCell className="font-medium">{`${contact.firstName} ${contact.lastName}`}</TableCell>
-                                        <TableCell>{contact.email}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
-                                        </TableCell>
-                                        <TableCell>{contact.subscribedAt}</TableCell>
+                                        {visibleColumns.firstName && <TableCell className="font-medium">{contact.firstName}</TableCell>}
+                                        {visibleColumns.lastName && <TableCell className="font-medium">{contact.lastName}</TableCell>}
+                                        {visibleColumns.email && <TableCell>{contact.email}</TableCell>}
+                                        {visibleColumns.phone && <TableCell>{contact.phone}</TableCell>}
+                                        {visibleColumns.company && <TableCell>{contact.company}</TableCell>}
+                                        {visibleColumns.status &&
+                                            <TableCell>
+                                                <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
+                                            </TableCell>
+                                        }
+                                        {visibleColumns.subscribedAt && <TableCell>{contact.subscribedAt}</TableCell>}
                                         {!list.isSystemList && (
                                             <TableCell>
                                                 <DropdownMenu>
