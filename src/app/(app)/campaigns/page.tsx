@@ -1,3 +1,4 @@
+
 'use client';
 
 import { Badge } from "@/components/ui/badge";
@@ -50,7 +51,7 @@ const campaigns = [
   },
   {
     id: "5",
-    name: " webinars coming up",
+    name: "Webinars Coming Up",
     status: "Sent",
     sentDate: "2023-08-10",
     openRate: "22.1%",
@@ -114,7 +115,7 @@ export default function CampaignsPage() {
                       {campaign.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{campaign.sentDate}</TableCell>
+                  <TableCell>{campaign.sentDate !== '-' ? new Date(campaign.sentDate).toLocaleDateString('en-US') : '-'}</TableCell>
                   <TableCell>{campaign.openRate}</TableCell>
                   <TableCell>{campaign.clickRate}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>

@@ -461,7 +461,7 @@ export default function NewCampaignPage() {
               <PopoverTrigger asChild>
                 <Button variant="outline">
                   <Calendar className="mr-2 h-4 w-4" />
-                  {date ? format(date, "PPP") : <span>Schedule Send</span>}
+                  {date ? format(date, "MM/dd/yyyy") : <span>Schedule Send</span>}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0">

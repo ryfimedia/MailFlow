@@ -108,7 +108,7 @@ export default function CampaignStatsPage() {
                 </Button>
                 <div className="flex-1">
                     <h1 className="text-3xl font-bold font-headline">{campaign.name}</h1>
-                    <p className="text-muted-foreground">Sent on {campaign.sentDate}</p>
+                    <p className="text-muted-foreground">Sent on {new Date(campaign.sentDate).toLocaleDateString('en-US')}</p>
                 </div>
                 <Button onClick={handleExport}>
                     <Download className="mr-2 h-4 w-4" />

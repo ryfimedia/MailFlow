@@ -83,6 +83,10 @@ export default function ContactsPage() {
   const [isCreateListOpen, setCreateListOpen] = React.useState(false);
   const [newListName, setNewListName] = React.useState("");
 
+  const [isRenameListOpen, setRenameListOpen] = React.useState(false);
+  const [listToRename, setListToRename] = React.useState<ContactList | null>(null);
+  const [renamedListName, setRenamedListName] = React.useState("");
+  
   const [isUploadModalOpen, setUploadModalOpen] = React.useState(false);
   const [uploadOption, setUploadOption] = React.useState('new');
   const [uploadNewListName, setUploadNewListName] = React.useState('');
@@ -128,6 +132,27 @@ export default function ContactsPage() {
     toast({ title: 'List Created!', description: `"${newListName}" has been created.` });
     setNewListName('');
     setCreateListOpen(false);
+  };
+  
+  const handleRenameClick = (list: ContactList) => {
+    setListToRename(list);
+    setRenamedListName(list.name);
+    setRenameListOpen(true);
+  };
+  
+  const handleRenameList = () => {
+    if (!listToRename || renamedListName.trim().length < 2) {
+      toast({ variant: 'destructive', title: 'Invalid Name', description: 'List name must be at least 2 characters.' });
+      return;
+    }
+    const updatedLists = lists.map(l => l.id === listToRename.id ? { ...l, name: renamedListName } : l);
+    setLists(updatedLists);
+    localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
+
+    toast({ title: 'List Renamed!', description: `The list has been renamed to "${renamedListName}".` });
+    setRenamedListName('');
+    setListToRename(null);
+    setRenameListOpen(false);
   };
 
   const handleDeleteList = (listId: string) => {
@@ -259,52 +284,56 @@ export default function ContactsPage() {
                       {lists.map(list => {
                           const Icon = listIcons[list.id] || (list.isMasterList ? listIcons['all'] : listIcons.default);
                           return (
-                            <Link key={list.id} href={`/contacts/${list.id}`} className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-                                <Card className={`h-full transition-all group-hover:shadow-md ${list.isSystemList ? 'bg-muted/50' : 'group-hover:border-primary/50'}`}>
-                                    <CardHeader className="flex flex-row items-start justify-between pb-2">
-                                        <CardTitle className="text-base font-medium">{list.name}</CardTitle>
-                                        {!list.isSystemList && (
-                                          <DropdownMenu>
-                                              <DropdownMenuTrigger asChild>
-                                                  <Button size="icon" variant="ghost" className="h-8 w-8 -mt-2 -mr-2" onClick={(e) => e.preventDefault()}>
-                                                      <MoreVertical className="h-4 w-4" />
-                                                  </Button>
-                                              </DropdownMenuTrigger>
-                                              <DropdownMenuContent align="end">
-                                                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                  <DropdownMenuItem>Rename</DropdownMenuItem>
-                                                  <AlertDialog>
-                                                      <AlertDialogTrigger asChild>
-                                                          <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Delete List</DropdownMenuItem>
-                                                      </AlertDialogTrigger>
-                                                      <AlertDialogContent>
-                                                          <AlertDialogHeader>
-                                                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                              <AlertDialogDescription>
-                                                                  This action cannot be undone. This will permanently delete the "{list.name}" list and all its contacts.
-                                                              </AlertDialogDescription>
-                                                          </AlertDialogHeader>
-                                                          <AlertDialogFooter>
-                                                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                              <AlertDialogAction onClick={() => handleDeleteList(list.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                                          </AlertDialogFooter>
-                                                      </AlertDialogContent>
-                                                  </AlertDialog>
-                                              </DropdownMenuContent>
-                                          </DropdownMenu>
-                                        )}
-                                    </CardHeader>
-                                    <CardContent>
-                                        <div className="flex items-center gap-2 text-2xl font-bold">
-                                            <Icon className="h-6 w-6 text-muted-foreground" />
-                                            {list.count.toLocaleString()}
-                                        </div>
-                                        <p className="text-xs text-muted-foreground">
-                                          {list.isSystemList ? list.createdAt : `Created on ${list.createdAt}`}
-                                        </p>
-                                    </CardContent>
-                                </Card>
-                            </Link>
+                            <div key={list.id} className="relative group">
+                                <Link href={`/contacts/${list.id}`} className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+                                    <Card className={`h-full transition-all group-hover:shadow-md ${list.isSystemList ? 'bg-muted/50' : 'group-hover:border-primary/50'}`}>
+                                        <CardHeader className="flex flex-row items-start justify-between pb-2">
+                                            <CardTitle className="text-base font-medium">{list.name}</CardTitle>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <div className="flex items-center gap-2 text-2xl font-bold">
+                                                <Icon className="h-6 w-6 text-muted-foreground" />
+                                                {list.count.toLocaleString()}
+                                            </div>
+                                            <p className="text-xs text-muted-foreground">
+                                            {list.isSystemList ? list.createdAt : `Created on ${new Date(list.createdAt).toLocaleDateString('en-US')}`}
+                                            </p>
+                                        </CardContent>
+                                    </Card>
+                                </Link>
+                                {!list.isSystemList && (
+                                    <div className="absolute top-2 right-2">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleRenameClick(list); }}>Rename</DropdownMenuItem>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Delete List</DropdownMenuItem>
+                                                    </AlertDialogTrigger>
+                                                    <AlertDialogContent>
+                                                        <AlertDialogHeader>
+                                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This action cannot be undone. This will permanently delete the "{list.name}" list and all its contacts.
+                                                            </AlertDialogDescription>
+                                                        </AlertDialogHeader>
+                                                        <AlertDialogFooter>
+                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={() => handleDeleteList(list.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                                        </AlertDialogFooter>
+                                                    </AlertDialogContent>
+                                                </AlertDialog>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
+                                )}
+                            </div>
                           )
                       })}
                   </CardContent>
@@ -387,6 +416,27 @@ export default function ContactsPage() {
           </div>
         </div>
       </div>
+      <Dialog open={isRenameListOpen} onOpenChange={setRenameListOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Rename List</DialogTitle>
+            <DialogDescription>Enter a new name for the list "{listToRename?.name}".</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-2">
+            <Label htmlFor="renamed-list-name">List Name</Label>
+            <Input
+              id="renamed-list-name"
+              value={renamedListName}
+              onChange={(e) => setRenamedListName(e.target.value)}
+              placeholder="e.g., Spring Promo List"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenameListOpen(false)}>Cancel</Button>
+            <Button onClick={handleRenameList}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

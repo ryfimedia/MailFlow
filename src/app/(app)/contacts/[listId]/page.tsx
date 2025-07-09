@@ -38,6 +38,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
 
 // Mock data and types - in a real app, these would be defined in a shared types file
 type Contact = {
@@ -88,6 +89,7 @@ const CONTACTS_BY_LIST_KEY = 'contactsByList';
 
 export default function ContactListPage() {
     const params = useParams();
+    const router = useRouter();
     const listId = params.listId as string;
     const { toast } = useToast();
     
@@ -136,7 +138,7 @@ export default function ContactListPage() {
         } catch (error) {
             console.error("Failed to load contact data from localStorage", error);
         }
-    }, [listId]);
+    }, [listId, router]);
 
     React.useEffect(() => {
         if (selectedContact) {
@@ -414,7 +416,7 @@ export default function ContactListPage() {
                                                     <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
                                                 </TableCell>
                                             }
-                                            {visibleColumns.subscribedAt && <TableCell>{contact.subscribedAt}</TableCell>}
+                                            {visibleColumns.subscribedAt && <TableCell>{new Date(contact.subscribedAt).toLocaleDateString('en-US')}</TableCell>}
                                             {!list.isSystemList && (
                                                 <TableCell>
                                                     <DropdownMenu>
