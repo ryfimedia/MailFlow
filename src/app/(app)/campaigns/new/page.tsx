@@ -92,6 +92,7 @@ export default function NewCampaignPage() {
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
+    mode: "onChange",
     defaultValues: {
       subject: "",
       emailBody: "",
@@ -156,15 +157,50 @@ export default function NewCampaignPage() {
                 />
               </PopoverContent>
             </Popover>
-            <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button type="submit" disabled={!form.formState.isValid} className="bg-accent text-accent-foreground hover:bg-accent/90">
               <Send className="mr-2 h-4 w-4" />
               {date ? "Schedule" : "Send Now"}
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-          <div className="lg:col-span-2 space-y-8">
+        <div className="space-y-8">
+            <Card>
+              <CardHeader>
+                <CardTitle>Recipients</CardTitle>
+                <CardDescription>Select the contact list to send this campaign to.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="recipientListId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Contact List</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a list" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {contactLists.map((list) => (
+                            <SelectItem key={list.id} value={list.value}>
+                              {list.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        You can manage your lists on the <Link href="/contacts" className="underline">Contacts page</Link>.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Email Content</CardTitle>
@@ -275,45 +311,6 @@ export default function NewCampaignPage() {
                 />
               </CardContent>
             </Card>
-          </div>
-
-          <div className="space-y-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>Recipients</CardTitle>
-                <CardDescription>Select the contact list to send this campaign to.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="recipientListId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Contact List</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a list" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {contactLists.map((list) => (
-                            <SelectItem key={list.id} value={list.value}>
-                              {list.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>
-                        You can manage your lists on the <Link href="/contacts" className="underline">Contacts page</Link>.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          </div>
         </div>
       </form>
     </Form>
