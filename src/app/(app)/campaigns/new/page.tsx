@@ -57,16 +57,19 @@ const mailingLists = allContactLists.filter(list => !list.isSystemList);
 const CAMPAIGNS_KEY = 'campaigns';
 
 const campaignFormSchema = z.object({
-  name: z.string().min(3, { message: "Campaign name must be at least 3 characters." }),
-  recipientListId: z.string({ required_error: "Please select a recipient list." }),
-  subject: z.string().min(5, { message: "Subject must be at least 5 characters." }),
+  name: z.string().min(3, { message: "Campaign name must be at least 3 characters." }).or(z.literal("")),
+  recipientListId: z.string({ required_error: "Please select a recipient list." }).or(z.literal("")),
+  subject: z.string().min(5, { message: "Subject must be at least 5 characters." }).or(z.literal("")),
   emailBody: z.string().min(1, { message: "Email body cannot be empty." }).refine(
     (html) => {
+        if (form.getValues('name') === '' && form.getValues('recipientListId') === '' && form.getValues('subject') === '') {
+            return true;
+        }
         const textContent = html.replace(/<[^>]*>/g, '').trim();
         return textContent.length >= 20;
     },
     { message: "Email body must contain at least 20 characters of text." }
-  ),
+  ).or(z.literal("")),
   scheduledAt: z.date().optional(),
   emailBackgroundColor: z.string().optional(),
 });
@@ -157,6 +160,7 @@ export default function NewCampaignPage() {
     defaultValues: {
       name: "",
       subject: "",
+      recipientListId: "",
       emailBody: "",
       emailBackgroundColor: "#ffffff",
     },
@@ -360,7 +364,7 @@ export default function NewCampaignPage() {
       toast({ variant: "destructive", title: "Template name required", description: "Please enter a name for your template." });
       return;
     }
-    if (!emailBody.replace(/<[^>]*>/g, '').trim()) {
+    if (!emailBody || !emailBody.replace(/<[^>]*>/g, '').trim()) {
       toast({ variant: "destructive", title: "Empty content", description: "Cannot save an empty email body as a template." });
       return;
     }
@@ -383,12 +387,25 @@ export default function NewCampaignPage() {
     const isEditing = !!campaignId;
     const status = statusOverride ? 'Draft' : (data.scheduledAt ? "Scheduled" : "Sent");
     
+    let finalEmailBody = data.emailBody || '';
+    if (status === 'Sent' || status === 'Scheduled') {
+        const footer = `
+            <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+              <p style="margin: 0 0 5px 0;">RyFi Media LLC. Copyright 2025, All rights reserved.</p>
+              <p style="margin: 0 0 5px 0;">Our mailing address is PO Box 157, Colton, OR 97017.</p>
+              <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
+              <a href="#unsubscribe" style="color: #888888; text-decoration: underline;">Unsubscribe from future emails</a>
+            </div>
+        `;
+        finalEmailBody += footer;
+    }
+
     const campaignData = {
       id: isEditing ? campaignId : crypto.randomUUID(),
       name: data.name,
       recipientListId: data.recipientListId,
       subject: data.subject,
-      emailBody: data.emailBody,
+      emailBody: finalEmailBody,
       emailBackgroundColor: data.emailBackgroundColor,
       scheduledAt: data.scheduledAt ? data.scheduledAt.toISOString() : undefined,
       status,
@@ -417,8 +434,11 @@ export default function NewCampaignPage() {
     }
   }
 
-  const handleSendOrSchedule = (data: CampaignFormValues) => {
-    onSubmit(data);
+  const handleSendOrSchedule = async () => {
+    const isValid = await form.trigger();
+    if (isValid) {
+      onSubmit(form.getValues());
+    }
   };
   
   const handleSaveDraft = () => {
@@ -429,7 +449,7 @@ export default function NewCampaignPage() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSendOrSchedule)} className="space-y-8">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold font-headline">{pageTitle}</h1>
           <div className="flex gap-2">
@@ -448,7 +468,7 @@ export default function NewCampaignPage() {
                 <CalendarComponent mode="single" selected={date} onSelect={setDate} initialFocus />
               </PopoverContent>
             </Popover>
-            <Button type="submit" disabled={!form.formState.isValid} className="bg-accent text-accent-foreground hover:bg-accent/90">
+            <Button type="button" onClick={handleSendOrSchedule} className="bg-accent text-accent-foreground hover:bg-accent/90">
               <Send className="mr-2 h-4 w-4" />
               {date ? "Schedule" : "Send Now"}
             </Button>
