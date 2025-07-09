@@ -343,7 +343,7 @@ export default function ContactsPage() {
                <Card>
                 <CardHeader>
                   <CardTitle>Import Contacts</CardTitle>
-                  <CardDescription>Upload a CSV with 'email' and 'name' columns.</CardDescription>
+                  <CardDescription>Upload a CSV. Allowed columns: email, firstName, lastName, phone, company.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-center w-full">

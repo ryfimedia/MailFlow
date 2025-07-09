@@ -21,6 +21,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -179,6 +190,47 @@ export default function ContactListPage() {
         });
         setIsEditDialogOpen(false);
         setSelectedContact(null);
+    };
+
+    const handleRemoveFromList = (contactId: string, contactName: string) => {
+        const updatedContacts = contacts.filter(c => c.id !== contactId);
+        setContacts(updatedContacts);
+
+        try {
+            const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
+            const contactsByListData = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
+
+            // Update contacts for the current list
+            contactsByListData[listId] = updatedContacts;
+            
+            // Also remove from the 'all' list if it exists and this isn't a system list (like 'bounces')
+            if (contactsByListData['all'] && !list?.isSystemList) {
+                 contactsByListData['all'] = contactsByListData['all'].filter((c: Contact) => c.id !== contactId);
+            }
+
+            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByListData));
+
+            // Update list counts
+            const updatedLists = allListsData.map(l => {
+                if (l.id === listId) {
+                    return { ...l, count: l.count - 1 };
+                }
+                // Also decrement the master list count if not a system list
+                if (l.id === 'all' && !list?.isSystemList) {
+                    return { ...l, count: l.count - 1 };
+                }
+                return l;
+            }).filter(l => l.count >= 0); // Ensure count never goes below zero
+            localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
+
+            toast({
+                title: "Contact Removed",
+                description: `${contactName} has been removed from this list.`,
+            });
+        } catch (error) {
+            console.error("Failed to remove contact:", error);
+            toast({ variant: 'destructive', title: "An error occurred" });
+        }
     };
 
     const requestSort = (key: keyof Contact) => {
@@ -429,7 +481,23 @@ export default function ContactListPage() {
                                                         <DropdownMenuContent align="end">
                                                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                                                             <DropdownMenuItem onClick={() => handleEditClick(contact)}>Edit Contact</DropdownMenuItem>
-                                                            <DropdownMenuItem className="text-destructive">Remove from List</DropdownMenuItem>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Remove from List</DropdownMenuItem>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            This will permanently remove {contact.firstName} {contact.lastName} from this list. This action cannot be undone.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => handleRemoveFromList(contact.id, `${contact.firstName} ${contact.lastName}`)} className="bg-destructive hover:bg-destructive/90">Remove</AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
                                                         </DropdownMenuContent>
                                                     </DropdownMenu>
                                                 </TableCell>
