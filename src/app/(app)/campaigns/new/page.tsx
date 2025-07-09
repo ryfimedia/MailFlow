@@ -85,7 +85,7 @@ const googleFonts = [
     { name: 'Space Grotesk', family: 'sans-serif' },
 ];
 
-const fontSizes = ['12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px'];
+const fontSizes = ['10px', '12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px', '48px'];
 
 const colors = [
   '#000000', '#444444', '#666666', '#999999', '#CCCCCC', '#FFFFFF', 
@@ -104,6 +104,7 @@ export default function NewCampaignPage() {
   const [date, setDate] = React.useState<Date>();
   const { toast } = useToast();
   const editorRef = React.useRef<HTMLDivElement>(null);
+  const [dividerColor, setDividerColor] = React.useState('#cccccc');
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -123,8 +124,6 @@ export default function NewCampaignPage() {
   
   React.useEffect(() => {
     if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
-      // This check prevents the cursor from jumping on every keystroke
-      // It assumes external changes (like AI generation) should update the editor
       const isContentDifferent = emailBodyValue.replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
       if (isContentDifferent) {
           editorRef.current.innerHTML = emailBodyValue;
@@ -137,7 +136,6 @@ export default function NewCampaignPage() {
     if (editorRef.current) {
       editorRef.current.focus();
       document.execCommand(command, false, value);
-      // Manually trigger form update after command
       form.setValue("emailBody", editorRef.current.innerHTML, {
         shouldValidate: true,
         shouldDirty: true,
@@ -146,11 +144,24 @@ export default function NewCampaignPage() {
   };
 
   const handleFontSize = (size: string) => {
-    const sizeMap: { [key: string]: string } = {
-        '12px': '2', '14px': '3', '16px': '4', '18px': '5',
-        '20px': '6', '24px': '6', '30px': '7', '36px': '7',
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    if (range.collapsed) return; // Only apply to selected text for simplicity
+
+    const getSelectionHtml = () => {
+        const content = range.cloneContents();
+        const div = document.createElement("div");
+        div.appendChild(content);
+        return div.innerHTML;
     };
-    applyFormat('fontSize', sizeMap[size]);
+
+    const html = getSelectionHtml();
+    if (html) {
+      // Wrap the selected HTML with a span that sets the font size
+      applyFormat("insertHTML", `<span style="font-size: ${size};">${html}</span>`);
+    }
   };
 
   const handleImageInsert = () => {
@@ -160,9 +171,8 @@ export default function NewCampaignPage() {
     }
   };
   
-  const handleInsertDivider = (height: number) => {
-    // We add a paragraph with a break tag to ensure the cursor can move below the divider.
-    const dividerHtml = `<hr style="height: ${height}px; width: 70%; margin: 16px auto; background-color: #cccccc; border: 0;" /><p><br></p>`;
+  const handleInsertDivider = (height: number, color: string) => {
+    const dividerHtml = `<hr style="height: ${height}px; width: 70%; margin: 16px auto; background-color: ${color}; border: 0;" /><p><br></p>`;
     applyFormat("insertHTML", dividerHtml);
   };
 
@@ -313,7 +323,7 @@ export default function NewCampaignPage() {
                             </Select>
 
                             <Select onValueChange={handleFontSize}>
-                              <SelectTrigger className="w-[70px] h-8 text-xs">
+                              <SelectTrigger className="w-[80px] h-8 text-xs">
                                 <SelectValue placeholder="Size" />
                               </SelectTrigger>
                               <SelectContent>
@@ -390,11 +400,16 @@ export default function NewCampaignPage() {
                                     </PopoverTrigger>
                                     <PopoverContent align="start" className="w-auto p-2">
                                         <div className="space-y-2">
-                                            <p className="text-xs font-medium text-muted-foreground">Divider Thickness</p>
+                                            <p className="text-xs font-medium text-muted-foreground">Divider Options</p>
                                             <div className="flex flex-col items-stretch gap-2">
-                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(2)}>Thin (2px)</Button>
-                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(5)}>Medium (5px)</Button>
-                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(10)}>Thick (10px)</Button>
+                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(2, dividerColor)}>Thin (2px)</Button>
+                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(5, dividerColor)}>Medium (5px)</Button>
+                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(10, dividerColor)}>Thick (10px)</Button>
+                                            </div>
+                                            <Separator />
+                                            <div className="flex items-center gap-2 pt-1">
+                                                <Label htmlFor="divider-color-picker" className="text-xs font-medium flex-1">Color</Label>
+                                                <Input id="divider-color-picker" type="color" className="h-8 w-8 p-0 border-none" value={dividerColor} onChange={(e) => setDividerColor(e.target.value)} />
                                             </div>
                                         </div>
                                     </PopoverContent>
