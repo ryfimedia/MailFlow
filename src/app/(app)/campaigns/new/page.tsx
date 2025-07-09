@@ -1,3 +1,4 @@
+
 'use client';
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -16,7 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette } from "lucide-react";
+import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -88,6 +89,10 @@ const colors = [
   '#E53935', '#C2185B'
 ];
 
+const emojis = [
+    '😀', '😂', '😍', '🤔', '👍', '❤️', '🚀', '🎉', '🔥', '💡', '💯', '🙏',
+    '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯',
+];
 
 export default function NewCampaignPage() {
   const [isGenerating, setIsGenerating] = React.useState(false);
@@ -126,6 +131,14 @@ export default function NewCampaignPage() {
     } finally {
       setIsGenerating(false);
     }
+  }
+
+  function handleEmojiClick(emoji: string) {
+    const currentBody = form.getValues("emailBody");
+    form.setValue("emailBody", `${currentBody || ''}${emoji}`, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
   }
 
   function onSubmit(data: CampaignFormValues) {
@@ -298,8 +311,31 @@ export default function NewCampaignPage() {
                             </div>
 
                             <div className="h-6 border-l border-border mx-1"></div>
-
-                            <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8"><ImageIcon className="h-4 w-4" /></Button>
+                            
+                            <div className="flex items-center gap-1">
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Insert Emoji" className="h-8 w-8"><Smile className="h-4 w-4" /></Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="grid grid-cols-6 gap-1">
+                                            {emojis.map(emoji => (
+                                                <Button 
+                                                    key={emoji} 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    type="button" 
+                                                    className="h-8 w-8 rounded-sm p-0 text-lg" 
+                                                    onClick={() => handleEmojiClick(emoji)}
+                                                >
+                                                    {emoji}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                                <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8"><ImageIcon className="h-4 w-4" /></Button>
+                            </div>
                           </div>
                           <FormControl>
                             <Textarea
