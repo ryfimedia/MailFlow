@@ -49,6 +49,7 @@ export type Template = {
 };
 
 export type Settings = {
+    templatesSeeded?: boolean;
     profile?: {
         companyName: string;
         address: string;

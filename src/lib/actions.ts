@@ -117,7 +117,7 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
         return { error: sendError };
     }
 
-    // Update campaign status and stats
+    // Update campaign stats
     campaignData.sentDate = new Date().toISOString();
     campaignData.recipients = recipients.length;
     campaignData.successfulDeliveries = emailsToSendNow.length;
@@ -185,17 +185,30 @@ export async function deleteCampaign(id: string) {
 
 export async function getTemplates(): Promise<Template[]> {
     const templatesCollection = adminDb.collection('templates');
-    const snapshot = await templatesCollection.orderBy('createdAt', 'desc').get();
+    const settingsRef = adminDb.collection('meta').doc('settings');
+
+    const [snapshot, settingsDoc] = await Promise.all([
+        templatesCollection.orderBy('createdAt', 'desc').get(),
+        settingsRef.get()
+    ]);
     
-    if (snapshot.empty) {
-        // Seed the database with default templates
+    const settings = settingsDoc.data() || {};
+
+    if (!settings.templatesSeeded) {
         const batch = adminDb.batch();
+        
+        // Add default templates
         defaultTemplates.forEach(template => {
             const docRef = templatesCollection.doc();
             batch.set(docRef, { ...template, createdAt: FieldValue.serverTimestamp() });
         });
+        
+        // Set the flag
+        batch.set(settingsRef, { templatesSeeded: true }, { merge: true });
+        
         await batch.commit();
-        // Fetch again
+
+        // Re-fetch templates
         const newSnapshot = await templatesCollection.orderBy('createdAt', 'desc').get();
         return newSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Template);
     }
