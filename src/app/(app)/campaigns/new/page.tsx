@@ -123,9 +123,15 @@ export default function NewCampaignPage() {
   
   React.useEffect(() => {
     if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
-      editorRef.current.innerHTML = emailBodyValue;
+      // This check prevents the cursor from jumping on every keystroke
+      // It assumes external changes (like AI generation) should update the editor
+      const isContentDifferent = emailBodyValue.replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
+      if (isContentDifferent) {
+          editorRef.current.innerHTML = emailBodyValue;
+      }
     }
   }, [emailBodyValue]);
+
 
   const applyFormat = (command: string, value?: string) => {
     if (editorRef.current) {
@@ -377,7 +383,7 @@ export default function NewCampaignPage() {
                                 ref={editorRef}
                                 contentEditable={true}
                                 onInput={(e) => field.onChange(e.currentTarget.innerHTML)}
-                                className="min-h-[400px] w-full rounded-b-md border-0 bg-background p-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                                className="email-editor min-h-[400px] w-full rounded-b-md border-0 bg-background p-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
                               />
                           </FormControl>

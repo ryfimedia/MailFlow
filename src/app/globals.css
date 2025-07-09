@@ -88,4 +88,8 @@
     pointer-events: none;
     display: block; /* For Firefox */
   }
+  .email-editor p,
+  .email-editor div {
+    line-height: 1.6;
+  }
 }
