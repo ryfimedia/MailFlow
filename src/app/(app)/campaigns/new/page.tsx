@@ -114,11 +114,18 @@ export default function NewCampaignPage() {
     },
   });
 
-  const emailBodyForAI = form.watch("emailBody").replace(/<[^>]+>/g, '');
+  const emailBodyValue = form.watch("emailBody");
+  const emailBodyForAI = emailBodyValue.replace(/<[^>]+>/g, '');
 
   React.useEffect(() => {
     form.setValue("scheduledAt", date);
   }, [date, form]);
+  
+  React.useEffect(() => {
+    if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
+      editorRef.current.innerHTML = emailBodyValue;
+    }
+  }, [emailBodyValue]);
 
   const applyFormat = (command: string, value?: string) => {
     if (editorRef.current) {
@@ -370,7 +377,6 @@ export default function NewCampaignPage() {
                                 ref={editorRef}
                                 contentEditable={true}
                                 onInput={(e) => field.onChange(e.currentTarget.innerHTML)}
-                                dangerouslySetInnerHTML={{ __html: field.value }}
                                 className="min-h-[400px] w-full rounded-b-md border-0 bg-background p-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
                               />
