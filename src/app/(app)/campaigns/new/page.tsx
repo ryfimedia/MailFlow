@@ -186,9 +186,10 @@ export default function NewCampaignPage() {
   React.useEffect(() => { form.setValue("scheduledAt", date); }, [date, form]);
   
   React.useEffect(() => {
-    if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
-      const isContentDifferent = emailBodyValue.replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
-      if (isContentDifferent) { editorRef.current.innerHTML = emailBodyValue; }
+    const currentBody = emailBodyValue || '';
+    if (editorRef.current && currentBody !== editorRef.current.innerHTML) {
+      const isContentDifferent = currentBody.replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
+      if (isContentDifferent) { editorRef.current.innerHTML = currentBody; }
     }
   }, [emailBodyValue]);
   
@@ -633,7 +634,7 @@ export default function NewCampaignPage() {
                                         <div className="space-y-4">
                                             <p className="text-sm font-medium">{selectedElement ? 'Edit Button' : 'Button Options'}</p>
                                             <div className="space-y-2"><Label htmlFor="button-text" className="text-xs">Text</Label><Input id="button-text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} placeholder="Click Here" /></div>
-                                            <div className="space-y-2"><Label htmlFor="button-url" className="text-xs">URL</Label><Input id="button-url" value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)} placeholder="https://" /></div>
+                                            <div className="space-y-2"><Label htmlFor="button-url" className="text-xs">URL</Label><Input id="button-url" value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)} placeholder="https://"/></div>
                                             <div className="flex justify-between items-center">
                                                 <div className="flex items-center gap-2"><Label htmlFor="button-bg-color" className="text-xs">Background</Label><Input id="button-bg-color" type="color" className="h-8 w-8 p-0 border-none" value={buttonBgColor} onChange={(e) => setButtonBgColor(e.target.value)} /></div>
                                                 <div className="flex items-center gap-2"><Label htmlFor="button-text-color" className="text-xs">Text</Label><Input id="button-text-color" type="color" className="h-8 w-8 p-0 border-none" value={buttonTextColor} onChange={(e) => setButtonTextColor(e.target.value)} /></div>
