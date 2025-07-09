@@ -29,7 +29,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
@@ -111,6 +110,7 @@ export default function ContactListPage() {
     const [contacts, setContacts] = React.useState<Contact[]>([]);
     
     const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
+    const [isConfirmCloseOpen, setIsConfirmCloseOpen] = React.useState(false);
     const [selectedContact, setSelectedContact] = React.useState<Contact | null>(null);
 
     const [selectedContactIds, setSelectedContactIds] = React.useState<string[]>([]);
@@ -128,6 +128,14 @@ export default function ContactListPage() {
 
     const form = useForm<EditContactFormValues>({
         resolver: zodResolver(EditContactFormSchema),
+        defaultValues: {
+            firstName: '',
+            lastName: '',
+            email: '',
+            phone: '',
+            company: '',
+            status: 'Subscribed'
+        }
     });
     
     React.useEffect(() => {
@@ -169,6 +177,20 @@ export default function ContactListPage() {
     const handleEditClick = (contact: Contact) => {
         setSelectedContact(contact);
         setIsEditDialogOpen(true);
+    };
+
+    const handleEditDialogStateChange = (open: boolean) => {
+        if (form.formState.isDirty && !open) {
+            setIsConfirmCloseOpen(true);
+        } else {
+            setIsEditDialogOpen(open);
+        }
+    };
+
+    const handleDiscardChanges = () => {
+        setIsConfirmCloseOpen(false);
+        setIsEditDialogOpen(false);
+        form.reset(); 
     };
 
     const handleEditSubmit = (values: EditContactFormValues) => {
@@ -562,7 +584,7 @@ export default function ContactListPage() {
                 </Card>
             </div>
             {!list.isSystemList && (
-                <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogStateChange}>
                     <DialogContent className="sm:max-w-[425px]">
                         <DialogHeader>
                             <DialogTitle>Edit contact</DialogTitle>
@@ -669,6 +691,26 @@ export default function ContactListPage() {
                     </DialogContent>
                 </Dialog>
             )}
+
+            <AlertDialog open={isConfirmCloseOpen} onOpenChange={setIsConfirmCloseOpen}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Discard unsaved changes?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            You have unsaved changes that will be lost. Are you sure you want to discard them?
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={handleDiscardChanges}
+                        >
+                            Discard
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </>
     );
 }
