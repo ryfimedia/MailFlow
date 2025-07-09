@@ -15,124 +15,63 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-
-const CAMPAIGNS_KEY = 'campaigns';
-
-const initialCampaigns = [
-  {
-    id: "1",
-    name: "🚀 Q2 Product Launch",
-    status: "Sent",
-    sentDate: "2023-06-15T12:00:00.000Z",
-    openRate: "35.2%",
-    clickRate: "5.8%",
-    recipients: 8500,
-    successfulDeliveries: 8495,
-    bounces: 5,
-    unsubscribes: 12,
-  },
-  {
-    id: "2",
-    name: "☀️ Summer Sale Promo",
-    status: "Sent",
-    sentDate: "2023-07-01T12:00:00.000Z",
-    openRate: "28.9%",
-    clickRate: "4.1%",
-    recipients: 12500,
-    successfulDeliveries: 12480,
-    bounces: 20,
-    unsubscribes: 25,
-  },
-  {
-    id: "3",
-    name: "🍂 Fall Newsletter",
-    status: "Draft",
-    sentDate: undefined,
-    openRate: "-",
-    clickRate: "-",
-  },
-  {
-    id: "4",
-    name: "🎁 Holiday Greetings",
-    status: "Scheduled",
-    sentDate: "2023-12-20T12:00:00.000Z",
-    openRate: "-",
-    clickRate: "-",
-  },
-  {
-    id: "5",
-    name: "Webinars Coming Up",
-    status: "Sent",
-    sentDate: "2023-08-10T12:00:00.000Z",
-    openRate: "22.1%",
-    clickRate: "3.5%",
-    recipients: 320,
-    successfulDeliveries: 320,
-    bounces: 0,
-    unsubscribes: 2,
-  },
-];
-
-type Campaign = typeof initialCampaigns[0];
+import { getCampaigns, duplicateCampaign, deleteCampaign } from "@/lib/actions";
+import type { Campaign } from "@/lib/types";
 
 export default function CampaignsPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
+  const [loading, setLoading] = React.useState(true);
+
+  const fetchCampaigns = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const fetchedCampaigns = await getCampaigns();
+      setCampaigns(fetchedCampaigns);
+    } catch (error) {
+      console.error("Failed to load campaigns", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch campaigns.' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   React.useEffect(() => {
-    try {
-      const storedCampaigns = localStorage.getItem(CAMPAIGNS_KEY);
-      if (storedCampaigns) {
-        setCampaigns(JSON.parse(storedCampaigns));
-      } else {
-        localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(initialCampaigns));
-        setCampaigns(initialCampaigns);
-      }
-    } catch (error) {
-      console.error("Failed to load campaigns from localStorage", error);
-      setCampaigns(initialCampaigns);
-    }
-  }, []);
+    fetchCampaigns();
+  }, [fetchCampaigns]);
 
   const handleRowClick = (campaign: Campaign) => {
     if (campaign.status === "Sent") {
       router.push(`/campaigns/${campaign.id}`);
+    } else {
+        router.push(`/campaigns/new?id=${campaign.id}`);
     }
   };
 
-  const handleDuplicate = (campaignId: string) => {
-    const campaignToDuplicate = campaigns.find(c => c.id === campaignId);
-    if (!campaignToDuplicate) {
-        toast({ variant: 'destructive', title: 'Error', description: 'Campaign not found for duplication.' });
-        return;
+  const handleDuplicate = async (campaignId: string) => {
+    try {
+      const newCampaign = await duplicateCampaign(campaignId);
+      if (newCampaign) {
+        toast({ title: 'Campaign Duplicated', description: `A new draft "${newCampaign.name}" has been created.` });
+        fetchCampaigns(); // Refresh the list
+      }
+    } catch (error) {
+       toast({ variant: 'destructive', title: 'Error', description: 'Failed to duplicate campaign.' });
     }
-
-    const newCampaign = {
-        ...campaignToDuplicate,
-        id: crypto.randomUUID(),
-        name: `Copy of ${campaignToDuplicate.name}`,
-        status: 'Draft',
-        sentDate: undefined,
-        scheduledAt: undefined,
-        openRate: '-',
-        clickRate: '-',
-    };
-    
-    // Remove properties that shouldn't be carried over
-    delete (newCampaign as Partial<Campaign>).recipients;
-    delete (newCampaign as Partial<Campaign>).successfulDeliveries;
-    delete (newCampaign as Partial<Campaign>).bounces;
-    delete (newCampaign as Partial<Campaign>).unsubscribes;
-
-
-    const updatedCampaigns = [...campaigns, newCampaign as Campaign];
-    setCampaigns(updatedCampaigns);
-    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(updatedCampaigns));
-    toast({ title: 'Campaign Duplicated', description: `A new draft "${newCampaign.name}" has been created.` });
   };
+
+  const handleDelete = async (campaignId: string) => {
+     try {
+        await deleteCampaign(campaignId);
+        toast({ title: 'Campaign Deleted', description: 'The campaign has been removed.' });
+        fetchCampaigns();
+     } catch (error) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete campaign.' });
+     }
+  }
 
   return (
     <div className="space-y-6">
@@ -166,44 +105,60 @@ export default function CampaignsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {campaigns.map((campaign) => (
-                <TableRow 
-                  key={campaign.id} 
-                  onClick={() => handleRowClick(campaign)}
-                  className={campaign.status === 'Sent' ? 'cursor-pointer' : ''}
-                >
-                  <TableCell className="font-medium">{campaign.name}</TableCell>
-                  <TableCell>
-                    <Badge variant={
-                      campaign.status === 'Sent' ? 'default' :
-                      campaign.status === 'Draft' ? 'secondary' : 'outline'
-                    }>
-                      {campaign.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{campaign.sentDate ? new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'}</TableCell>
-                  <TableCell>{campaign.openRate}</TableCell>
-                  <TableCell>{campaign.clickRate}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button aria-haspopup="true" size="icon" variant="ghost">
-                          <MoreHorizontal className="h-4 w-4" />
-                          <span className="sr-only">Toggle menu</span>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild disabled={campaign.status === 'Sent'}>
-                           <Link href={campaign.status !== 'Sent' ? `/campaigns/new?id=${campaign.id}` : '#'}>Edit</Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => handleDuplicate(campaign.id)}>Duplicate</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+              {loading ? (
+                Array.from({length: 5}).map((_, i) => (
+                    <TableRow key={i}>
+                        <TableCell colSpan={6} className="p-0">
+                            <div className="h-14 w-full bg-muted/50 animate-pulse" />
+                        </TableCell>
+                    </TableRow>
+                ))
+              ) : campaigns.length === 0 ? (
+                <TableRow>
+                    <TableCell colSpan={6} className="text-center h-24">
+                        No campaigns found.
+                    </TableCell>
                 </TableRow>
-              ))}
+              ) : (
+                campaigns.map((campaign) => (
+                  <TableRow 
+                    key={campaign.id} 
+                    onClick={() => handleRowClick(campaign)}
+                    className="cursor-pointer"
+                  >
+                    <TableCell className="font-medium">{campaign.name}</TableCell>
+                    <TableCell>
+                      <Badge variant={
+                        campaign.status === 'Sent' ? 'default' :
+                        campaign.status === 'Draft' ? 'secondary' : 'outline'
+                      }>
+                        {campaign.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>{campaign.sentDate ? new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'}</TableCell>
+                    <TableCell>{campaign.openRate}</TableCell>
+                    <TableCell>{campaign.clickRate}</TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button aria-haspopup="true" size="icon" variant="ghost">
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Toggle menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
+                             <Link href={`/campaigns/new?id=${campaign.id}`}>Edit</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleDuplicate(campaign.id)}>Duplicate</DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => handleDelete(campaign.id)} className="text-destructive">Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

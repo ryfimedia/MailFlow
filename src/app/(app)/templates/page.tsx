@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
-import { Eye, PlusCircle } from 'lucide-react';
+import { Eye, PlusCircle, Trash2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -14,91 +14,58 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-
-// Mock data for templates - This will be the initial fallback
-const initialTemplates = [
-  {
-    id: '1',
-    name: 'Welcome Email',
-    content: `
-      <h1 style="font-size: 24px; font-weight: bold; color: #333;">Welcome aboard!</h1>
-      <p>Hi [Name],</p>
-      <p>We're so excited to have you join our community. We're here to help you get started with [Your Product/Service].</p>
-      <p>To get the most out of it, we recommend you check out our getting started guide:</p>
-      <p style="text-align: center; margin: 20px 0;">
-        <a href="#" style="background-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Read the Guide</a>
-      </p>
-      <p>If you have any questions, feel free to reply to this email. We're always happy to help!</p>
-      <p>Cheers,<br>The Team</p>
-    `,
-  },
-  {
-    id: '2',
-    name: 'Product Announcement',
-    content: `
-      <div style="text-align: center;">
-        <img src="https://placehold.co/600x300.png" alt="Product Image" style="max-width: 100%; border-radius: 8px;" data-ai-hint="product launch">
-      </div>
-      <h2 style="font-size: 22px; font-weight: bold; color: #333; margin-top: 20px;">Introducing Our Newest Feature!</h2>
-      <p>We've been working hard on something special, and we're thrilled to finally share it with you.</p>
-      <p>Our new [Feature Name] will help you [benefit of the feature]. It's designed to make your experience even better.</p>
-      <hr style="height: 2px; width: 70%; margin: 16px auto; background-color: #cccccc; border: 0;" />
-      <p style="text-align: center; margin: 20px 0;">
-        <a href="#" style="background-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Learn More</a>
-      </p>
-      <p>Let us know what you think!</p>
-    `,
-  },
-  {
-    id: '3',
-    name: 'Flash Sale',
-    content: `
-      <div style="text-align: center; background-color: #f8e7b3; padding: 20px; border-radius: 8px;">
-        <h1 style="font-size: 36px; font-weight: bold; color: #333; margin:0;">FLASH SALE!</h1>
-        <p style="font-size: 18px; color: #555;">For the next 48 hours only</p>
-      </div>
-      <h2 style="font-size: 28px; font-weight: bold; text-align: center; margin: 20px 0;">Get 50% Off Everything!</h2>
-      <p>That's right! We're having a massive sale, but it won't last long. Use the code below at checkout to get 50% off your entire order.</p>
-      <div style="text-align: center; margin: 20px 0; padding: 15px; border: 2px dashed hsl(var(--primary)); border-radius: 5px; background-color: #f9f9f9;">
-        <strong style="font-size: 20px; letter-spacing: 2px;">SALE50</strong>
-      </div>
-      <p style="text-align: center; margin: 20px 0;">
-        <a href="#" style="background-color: hsl(var(--primary)); color: hsl(var(--primary-foreground)); padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Shop Now</a>
-      </p>
-    `,
-  },
-];
-
-const TEMPLATES_STORAGE_KEY = 'emailTemplates';
-
-type Template = {
-  id: string;
-  name: string;
-  content: string;
-};
+import { getTemplates, deleteTemplate } from '@/lib/actions';
+import type { Template } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
+  } from "@/components/ui/alert-dialog";
 
 export default function TemplatesPage() {
     const router = useRouter();
+    const { toast } = useToast();
     const [templates, setTemplates] = React.useState<Template[]>([]);
+    const [loading, setLoading] = React.useState(true);
+
+    const fetchTemplates = React.useCallback(async () => {
+        setLoading(true);
+        try {
+            const fetchedTemplates = await getTemplates();
+            setTemplates(fetchedTemplates);
+        } catch (error) {
+            console.error("Failed to load templates", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch templates.' });
+        } finally {
+            setLoading(false);
+        }
+    }, [toast]);
 
     React.useEffect(() => {
-        try {
-            const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-            if (storedTemplates) {
-                setTemplates(JSON.parse(storedTemplates));
-            } else {
-                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(initialTemplates));
-                setTemplates(initialTemplates);
-            }
-        } catch (error) {
-            console.error("Failed to load templates from localStorage", error);
-            setTemplates(initialTemplates);
-        }
-    }, []);
+        fetchTemplates();
+    }, [fetchTemplates]);
 
     const handleUseTemplate = (content: string) => {
         sessionStorage.setItem('selectedTemplateContent', content);
         router.push('/campaigns/new');
+    }
+
+    const handleDelete = async (templateId: string, templateName: string) => {
+        try {
+            await deleteTemplate(templateId);
+            toast({ title: 'Template Deleted', description: `Template "${templateName}" has been removed.` });
+            fetchTemplates();
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not delete template.' });
+        }
     }
 
     return (
@@ -119,37 +86,65 @@ export default function TemplatesPage() {
                     <CardDescription>Use these templates to kickstart your next campaign. You can save new templates from the campaign editor.</CardDescription>
                 </CardHeader>
                 <CardContent className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {templates.map(template => (
-                         <Card key={template.id} className="flex flex-col">
-                            <CardHeader>
-                                <CardTitle>{template.name}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="flex-grow">
-                                <div className="aspect-[4/3] w-full rounded-md border bg-muted overflow-hidden">
-                                     <div 
-                                        className="p-4 scale-[0.3] origin-top-left bg-white h-[333.33%] w-[333.33%] pointer-events-none"
-                                        dangerouslySetInnerHTML={{ __html: template.content }} 
-                                     />
-                                </div>
-                            </CardContent>
-                            <CardFooter className="flex justify-end gap-2">
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <Button variant="ghost" size="sm"><Eye className="mr-2 h-4 w-4" />Preview</Button>
-                                    </DialogTrigger>
-                                    <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-                                        <DialogHeader>
-                                            <DialogTitle>{template.name}</DialogTitle>
-                                        </DialogHeader>
-                                        <div className="flex-grow border rounded-md overflow-hidden bg-white">
-                                             <iframe srcDoc={template.content} className="w-full h-full" />
-                                        </div>
-                                    </DialogContent>
-                                </Dialog>
-                                <Button size="sm" onClick={() => handleUseTemplate(template.content)}>Use Template</Button>
-                            </CardFooter>
-                        </Card>
-                    ))}
+                    {loading ? (
+                        Array.from({length: 3}).map((_, i) => (
+                            <Card key={i} className="flex flex-col">
+                                <CardHeader><Skeleton className="h-6 w-3/4" /></CardHeader>
+                                <CardContent className="flex-grow"><Skeleton className="aspect-[4/3] w-full" /></CardContent>
+                                <CardFooter className="flex justify-end gap-2"><Skeleton className="h-9 w-20" /><Skeleton className="h-9 w-24" /></CardFooter>
+                            </Card>
+                        ))
+                    ) : (
+                        templates.map(template => (
+                             <Card key={template.id} className="flex flex-col">
+                                <CardHeader>
+                                    <CardTitle className="truncate">{template.name}</CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-grow">
+                                    <div className="aspect-[4/3] w-full rounded-md border bg-muted overflow-hidden">
+                                         <div 
+                                            className="p-4 scale-[0.3] origin-top-left bg-white h-[333.33%] w-[333.33%] pointer-events-none"
+                                            dangerouslySetInnerHTML={{ __html: template.content }} 
+                                         />
+                                    </div>
+                                </CardContent>
+                                <CardFooter className="flex justify-between items-center">
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                            <Button variant="destructive" size="icon" className="h-8 w-8"><Trash2 className="h-4 w-4" /></Button>
+                                        </AlertDialogTrigger>
+                                        <AlertDialogContent>
+                                            <AlertDialogHeader>
+                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                <AlertDialogDescription>This will permanently delete the "{template.name}" template.</AlertDialogDescription>
+                                            </AlertDialogHeader>
+                                            <AlertDialogFooter>
+                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                <AlertDialogAction onClick={() => handleDelete(template.id, template.name)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                            </AlertDialogFooter>
+                                        </AlertDialogContent>
+                                    </AlertDialog>
+
+                                    <div className='flex gap-2'>
+                                        <Dialog>
+                                            <DialogTrigger asChild>
+                                                <Button variant="ghost" size="sm"><Eye className="mr-2 h-4 w-4" />Preview</Button>
+                                            </DialogTrigger>
+                                            <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+                                                <DialogHeader>
+                                                    <DialogTitle>{template.name}</DialogTitle>
+                                                </DialogHeader>
+                                                <div className="flex-grow border rounded-md overflow-hidden bg-white">
+                                                     <iframe srcDoc={template.content} title={template.name} className="w-full h-full" />
+                                                </div>
+                                            </DialogContent>
+                                        </Dialog>
+                                        <Button size="sm" onClick={() => handleUseTemplate(template.content)}>Use Template</Button>
+                                    </div>
+                                </CardFooter>
+                            </Card>
+                        ))
+                    )}
                 </CardContent>
             </Card>
         </div>

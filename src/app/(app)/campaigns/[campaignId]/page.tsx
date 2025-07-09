@@ -11,22 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import type { Campaign } from "@/lib/types";
+import { getCampaignById } from "@/lib/actions";
 
-const CAMPAIGNS_KEY = 'campaigns';
-
-// Mock data for a single campaign - will be replaced by fetched data
-type Campaign = {
-    id: string;
-    name: string;
-    status: string;
-    sentDate: string;
-    openRate: string;
-    clickRate: string;
-    recipients: number;
-    successfulDeliveries: number;
-    bounces: number;
-    unsubscribes: number;
-};
 
 const StatCard = ({ title, value, icon: Icon, description }: { title: string, value: string | number, icon: React.ElementType, description?: string }) => (
     <div className="flex flex-col p-4 border rounded-lg bg-card">
@@ -48,20 +35,20 @@ export default function CampaignStatsPage() {
 
     React.useEffect(() => {
         if (!campaignId) return;
-        try {
-            const storedCampaigns = localStorage.getItem(CAMPAIGNS_KEY);
-            if (storedCampaigns) {
-                const allCampaigns: Campaign[] = JSON.parse(storedCampaigns);
-                const foundCampaign = allCampaigns.find(c => c.id === campaignId);
+        
+        async function fetchCampaign() {
+            try {
+                const foundCampaign = await getCampaignById(campaignId);
                 setCampaign(foundCampaign || null);
-            } else {
+            } catch (error) {
+                console.error("Failed to load campaign from firestore", error);
                 setCampaign(null);
+                toast({ variant: "destructive", title: "Error", description: "Failed to load campaign data."})
             }
-        } catch (error) {
-            console.error("Failed to load campaign from localStorage", error);
-            setCampaign(null);
         }
-    }, [campaignId]);
+
+        fetchCampaign();
+    }, [campaignId, toast]);
 
     const handleExport = () => {
         toast({
@@ -118,7 +105,7 @@ export default function CampaignStatsPage() {
                 </Button>
                 <div className="flex-1">
                     <h1 className="text-3xl font-bold font-headline">{campaign.name}</h1>
-                    <p className="text-muted-foreground">Sent on {new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' })}</p>
+                    <p className="text-muted-foreground">Sent on {new Date(campaign.sentDate as string).toLocaleDateString('en-US', { timeZone: 'UTC' })}</p>
                 </div>
                 <Button onClick={handleExport}>
                     <Download className="mr-2 h-4 w-4" />

@@ -21,8 +21,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from '@/components/ui/textarea';
-
-const SETTINGS_KEY = 'appSettings';
+import { getSettings, saveSettings } from '@/lib/actions';
+import type { Settings } from '@/lib/types';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const profileFormSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters."),
@@ -39,6 +40,7 @@ type DefaultsFormValues = z.infer<typeof defaultsFormSchema>;
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const [loading, setLoading] = React.useState(true);
 
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
@@ -51,29 +53,27 @@ export default function SettingsPage() {
   });
 
   React.useEffect(() => {
-    try {
-      const storedSettings = localStorage.getItem(SETTINGS_KEY);
-      if (storedSettings) {
-        const settings = JSON.parse(storedSettings);
-        profileForm.reset(settings.profile || {});
-        defaultsForm.reset(settings.defaults || {});
-      }
-    } catch (error) {
-      console.error("Failed to load settings:", error);
+    async function fetchSettings() {
+        setLoading(true);
+        try {
+            const settings = await getSettings();
+            if (settings) {
+                profileForm.reset(settings.profile || {});
+                defaultsForm.reset(settings.defaults || {});
+            }
+        } catch (error) {
+            console.error("Failed to load settings:", error);
+            toast({ variant: "destructive", title: "Error", description: "Could not load settings." });
+        } finally {
+            setLoading(false);
+        }
     }
-  }, [profileForm, defaultsForm]);
+    fetchSettings();
+  }, [profileForm, defaultsForm, toast]);
   
-  const handleSave = (data: ProfileFormValues | DefaultsFormValues, formName: 'profile' | 'defaults') => {
+  const handleSave = async (data: ProfileFormValues | DefaultsFormValues, formName: 'profile' | 'defaults') => {
     try {
-      const storedSettingsRaw = localStorage.getItem(SETTINGS_KEY);
-      const existingSettings = storedSettingsRaw ? JSON.parse(storedSettingsRaw) : {};
-      
-      const updatedSettings = {
-        ...existingSettings,
-        [formName]: data
-      };
-
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(updatedSettings));
+      await saveSettings(formName, data);
       toast({
         title: "Settings Saved",
         description: `Your ${formName} settings have been updated successfully.`,
@@ -83,6 +83,16 @@ export default function SettingsPage() {
        toast({ variant: "destructive", title: "Error", description: "Could not save settings." });
     }
   };
+  
+  if (loading) {
+    return (
+        <div className="space-y-6">
+            <h1 className="text-3xl font-bold font-headline">Settings</h1>
+            <Skeleton className='w-[400px] h-10' />
+            <Skeleton className='w-full h-80' />
+        </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -136,7 +146,7 @@ export default function SettingsPage() {
                   />
                 </CardContent>
                 <CardFooter className="border-t px-6 py-4">
-                  <Button type="submit">Save</Button>
+                  <Button type="submit" disabled={profileForm.formState.isSubmitting}>Save</Button>
                 </CardFooter>
               </Card>
             </form>
@@ -182,7 +192,7 @@ export default function SettingsPage() {
                   />
                 </CardContent>
                 <CardFooter className="border-t px-6 py-4">
-                   <Button type="submit">Save</Button>
+                   <Button type="submit" disabled={defaultsForm.formState.isSubmitting}>Save</Button>
                 </CardFooter>
               </Card>
             </form>

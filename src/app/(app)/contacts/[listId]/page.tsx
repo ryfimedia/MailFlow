@@ -3,7 +3,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Plus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -12,66 +12,17 @@ import * as z from "zod";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuPortal,
-} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, DropdownMenuCheckboxItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-// Mock data and types - in a real app, these would be defined in a shared types file
-type Contact = {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    company?: string;
-    status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
-    subscribedAt: string;
-};
-
-type ContactList = {
-    id: string;
-    name: string;
-    count: number;
-    createdAt: string;
-    isSystemList: boolean;
-    isMasterList?: boolean;
-};
+import { getContactListById, getContactsByListId, getContactLists, updateContact, removeContactsFromList, addContactsToLists } from "@/lib/actions";
+import type { Contact, ContactList } from "@/lib/types";
 
 const columnConfig = [
     { id: 'firstName', label: 'First Name' },
@@ -97,9 +48,6 @@ const EditContactFormSchema = z.object({
 type EditContactFormValues = z.infer<typeof EditContactFormSchema>;
 type SortConfig = { key: keyof Contact; direction: 'ascending' | 'descending' } | null;
 
-const CONTACT_LISTS_KEY = 'contactLists';
-const CONTACTS_BY_LIST_KEY = 'contactsByList';
-
 export default function ContactListPage() {
     const params = useParams();
     const router = useRouter();
@@ -109,6 +57,7 @@ export default function ContactListPage() {
     const [list, setList] = React.useState<ContactList | null>(null);
     const [allLists, setAllLists] = React.useState<ContactList[]>([]);
     const [contacts, setContacts] = React.useState<Contact[]>([]);
+    const [loading, setLoading] = React.useState(true);
     
     const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
     const [isConfirmCloseOpen, setIsConfirmCloseOpen] = React.useState(false);
@@ -129,38 +78,32 @@ export default function ContactListPage() {
 
     const form = useForm<EditContactFormValues>({
         resolver: zodResolver(EditContactFormSchema),
-        defaultValues: {
-            firstName: '',
-            lastName: '',
-            email: '',
-            phone: '',
-            company: '',
-            status: 'Subscribed'
-        }
+        defaultValues: { firstName: '', lastName: '', email: '', phone: '', company: '', status: 'Subscribed' }
     });
+
+    const fetchData = React.useCallback(async () => {
+        setLoading(true);
+        try {
+            const [currentList, contactsForList, allListsData] = await Promise.all([
+                getContactListById(listId),
+                getContactsByListId(listId),
+                getContactLists()
+            ]);
+            setList(currentList);
+            setContacts(contactsForList);
+            setAllLists(allListsData);
+        } catch (error) {
+            console.error("Failed to load contact data from Firestore", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch contact data.' });
+            router.push('/contacts');
+        } finally {
+            setLoading(false);
+        }
+    }, [listId, router, toast]);
     
     React.useEffect(() => {
-        try {
-            const storedLists = localStorage.getItem(CONTACT_LISTS_KEY);
-            const storedContacts = localStorage.getItem(CONTACTS_BY_LIST_KEY);
-            if (storedLists && storedContacts) {
-                const allListsData: ContactList[] = JSON.parse(storedLists);
-                const contactsByListData = JSON.parse(storedContacts);
-                
-                setAllLists(allListsData);
-                const currentList = allListsData.find(l => l.id === listId) || null;
-                setList(currentList);
-                
-                if (currentList) {
-                    setContacts(contactsByListData[listId] || []);
-                }
-            } else {
-                 router.push('/contacts'); // Redirect if no data
-            }
-        } catch (error) {
-            console.error("Failed to load contact data from localStorage", error);
-        }
-    }, [listId, router]);
+        fetchData();
+    }, [fetchData]);
 
     React.useEffect(() => {
         if (selectedContact) {
@@ -185,6 +128,7 @@ export default function ContactListPage() {
             setIsConfirmCloseOpen(true);
         } else {
             setIsEditDialogOpen(open);
+            if (!open) form.reset();
         }
     };
 
@@ -194,115 +138,33 @@ export default function ContactListPage() {
         form.reset(); 
     };
 
-    const handleEditSubmit = (values: EditContactFormValues) => {
+    const handleEditSubmit = async (values: EditContactFormValues) => {
         if (!selectedContact) return;
 
-        const oldStatus = selectedContact.status;
-        const newStatus = values.status;
-        const updatedContactData = { ...selectedContact, ...values };
-
         try {
-            const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
-            const contactsByListData = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-
-            // Just update fields, no status change
-            if (oldStatus === newStatus) {
-                const updatedContactsForList = contacts.map(c => 
-                    c.id === selectedContact.id ? updatedContactData : c
-                );
-                setContacts(updatedContactsForList);
-                contactsByListData[listId] = updatedContactsForList;
-            } else { // Status has changed, handle list transitions
-                // Case 1: Becoming Unsubscribed
-                if (newStatus === 'Unsubscribed') {
-                    // Remove from all non-system lists
-                    allListsData.forEach(l => {
-                        if (!l.isSystemList && contactsByListData[l.id]) {
-                            contactsByListData[l.id] = contactsByListData[l.id].filter((c: Contact) => c.id !== selectedContact.id);
-                        }
-                    });
-                    // Add to 'unsubscribes' list
-                    const unsubList = contactsByListData['unsubscribes'] || [];
-                    if (!unsubList.some((c: Contact) => c.id === selectedContact.id)) {
-                        unsubList.push(updatedContactData);
-                        contactsByListData['unsubscribes'] = unsubList;
-                    }
-                } 
-                // Case 2: Becoming Subscribed again
-                else if (newStatus === 'Subscribed' && oldStatus !== 'Subscribed') {
-                     // Remove from old system list (e.g., 'unsubscribes' or 'bounces')
-                    if (contactsByListData[oldStatus.toLowerCase()]) {
-                        contactsByListData[oldStatus.toLowerCase()] = contactsByListData[oldStatus.toLowerCase()].filter((c: Contact) => c.id !== selectedContact.id);
-                    }
-                    // Add to 'all' master list
-                    const allList = contactsByListData['all'] || [];
-                    if (!allList.some((c: Contact) => c.id === selectedContact.id)) {
-                         allList.push(updatedContactData);
-                         contactsByListData['all'] = allList;
-                    }
-                }
-                
-                // Refresh current page's contact list
-                setContacts(contacts.filter(c => c.id !== selectedContact.id));
-            }
-            
-            // Recalculate all list counts and save
-            const updatedLists = allListsData.map(l => ({
-                ...l,
-                count: (contactsByListData[l.id] || []).length,
-            }));
-
-            localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByListData));
-            setAllLists(updatedLists); // Update all lists state as counts changed
-
+            await updateContact(selectedContact.id, values, listId);
             toast({ title: "Contact Updated", description: `${values.firstName} ${values.lastName}'s details have been saved.`});
             setIsEditDialogOpen(false);
             setSelectedContact(null);
-
+            fetchData(); // Refresh data
         } catch (error) {
             console.error("Failed to save updated contact:", error);
-            toast({ variant: 'destructive', title: "An error occurred" });
+            toast({ variant: 'destructive', title: "An error occurred", description: "Could not update contact." });
         }
     };
 
-    const handleRemoveFromList = (contactId: string, contactName: string) => {
-        const updatedContacts = contacts.filter(c => c.id !== contactId);
-        setContacts(updatedContacts);
-
+    const handleRemoveSelectedFromList = async () => {
+        if (selectedContactIds.length === 0) return;
         try {
-            const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
-            const contactsByListData = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-
-            // Update contacts for the current list
-            contactsByListData[listId] = updatedContacts;
-            
-            // Also remove from the 'all' list if it exists and this isn't a system list (like 'bounces')
-            if (contactsByListData['all'] && !list?.isSystemList) {
-                 contactsByListData['all'] = contactsByListData['all'].filter((c: Contact) => c.id !== contactId);
-            }
-
-            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByListData));
-
-            // Update list counts
-            const updatedLists = allListsData.map(l => {
-                if (l.id === listId) {
-                    return { ...l, count: l.count - 1 };
-                }
-                // Also decrement the master list count if not a system list
-                if (l.id === 'all' && !list?.isSystemList) {
-                    return { ...l, count: l.count - 1 };
-                }
-                return l;
-            }).filter(l => l.count >= 0); // Ensure count never goes below zero
-            localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-
+            await removeContactsFromList(selectedContactIds, listId);
             toast({
-                title: "Contact Removed",
-                description: `${contactName} has been removed from this list.`,
+                title: "Contacts Removed",
+                description: `${selectedContactIds.length} contact(s) have been removed from this list.`,
             });
+            setSelectedContactIds([]);
+            fetchData();
         } catch (error) {
-            console.error("Failed to remove contact:", error);
+            console.error("Failed to remove contacts:", error);
             toast({ variant: 'destructive', title: "An error occurred" });
         }
     };
@@ -342,43 +204,17 @@ export default function ContactListPage() {
     };
     
     const handleSelectOne = (contactId: string, checked: boolean) => {
-        if (checked) {
-            setSelectedContactIds(prev => [...prev, contactId]);
-        } else {
-            setSelectedContactIds(prev => prev.filter(id => id !== contactId));
-        }
+        setSelectedContactIds(prev => checked ? [...prev, contactId] : prev.filter(id => id !== contactId));
     };
     
-    const handleAddToList = (targetListId: string) => {
-        const contactsToAdd = contacts.filter(c => selectedContactIds.includes(c.id));
-        if (contactsToAdd.length === 0) return;
+    const handleAddToList = async (targetListId: string) => {
+        if (selectedContactIds.length === 0) return;
 
         try {
-            const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
-            const contactsByListData = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-
-            const targetList = allListsData.find(l => l.id === targetListId);
-            if (!targetList) {
-                toast({ variant: 'destructive', title: "List not found" });
-                return;
-            }
-
-            const existingTargetContacts = contactsByListData[targetListId] || [];
-            const existingEmails = new Set(existingTargetContacts.map((c: Contact) => c.email));
-            const newContactsForTarget = contactsToAdd.filter(c => !existingEmails.has(c.email));
-            
-            contactsByListData[targetListId] = [...existingTargetContacts, ...newContactsForTarget];
-            
-            const updatedLists = allListsData.map(l => 
-                l.id === targetListId ? { ...l, count: contactsByListData[targetListId].length } : l
-            );
-            
-            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByListData));
-            localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-
+            const { addedCount, targetListName } = await addContactsToLists(selectedContactIds, [targetListId]);
             toast({
                 title: "Contacts Added",
-                description: `${newContactsForTarget.length} contact(s) added to "${targetList.name}".`,
+                description: `${addedCount} contact(s) added to "${targetListName}".`,
             });
             setSelectedContactIds([]);
         } catch (error) {
@@ -387,6 +223,18 @@ export default function ContactListPage() {
         }
     };
     
+    if (loading) {
+        return (
+            <div className="space-y-6">
+                 <Skeleton className="h-10 w-48" />
+                 <Card>
+                    <CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader>
+                    <CardContent><Skeleton className="h-64 w-full" /></CardContent>
+                 </Card>
+            </div>
+        )
+    }
+
     if (!list) {
         return (
             <div className="space-y-6">
@@ -407,18 +255,12 @@ export default function ContactListPage() {
     }
 
     const cardDescription = list.isSystemList 
-        ? "This is a system-managed list. Contacts cannot be edited or removed."
+        ? "This is a system-managed list. Contacts cannot be edited here."
         : `A list of all contacts in ${list.name}.`;
 
     const renderSortArrow = (columnKey: keyof Contact) => {
-        if (sortConfig?.key !== columnKey) {
-            return <ArrowUpDown className="ml-2 h-4 w-4" />;
-        }
-        return sortConfig.direction === 'ascending' ? (
-            <ArrowUp className="ml-2 h-4 w-4" />
-        ) : (
-            <ArrowDown className="ml-2 h-4 w-4" />
-        );
+        if (sortConfig?.key !== columnKey) return <ArrowUpDown className="ml-2 h-4 w-4" />;
+        return sortConfig.direction === 'ascending' ? <ArrowUp className="ml-2 h-4 w-4" /> : <ArrowDown className="ml-2 h-4 w-4" />;
     };
 
     const isAllSelected = selectedContactIds.length > 0 && selectedContactIds.length === sortedContacts.length;
@@ -468,7 +310,7 @@ export default function ContactListPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                         {selectedContactIds.length > 0 && (
+                         {selectedContactIds.length > 0 && !list.isSystemList && (
                             <div className="mb-4 flex items-center gap-4 rounded-lg bg-secondary p-3">
                                 <span className="text-sm font-medium">{selectedContactIds.length} selected</span>
                                 <DropdownMenu>
@@ -487,6 +329,7 @@ export default function ContactListPage() {
                                         ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+                                 <Button size="sm" variant="destructive" onClick={handleRemoveSelectedFromList}>Remove from List</Button>
                             </div>
                          )}
                         <div className="overflow-x-auto">
@@ -513,11 +356,7 @@ export default function ContactListPage() {
                                                 </TableHead>
                                             )
                                         ))}
-                                        {!list.isSystemList && (
-                                            <TableHead>
-                                                <span className="sr-only">Actions</span>
-                                            </TableHead>
-                                        )}
+                                        {!list.isSystemList && <TableHead><span className="sr-only">Actions</span></TableHead>}
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -568,7 +407,7 @@ export default function ContactListPage() {
                                                                     </AlertDialogHeader>
                                                                     <AlertDialogFooter>
                                                                         <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                        <AlertDialogAction onClick={() => handleRemoveFromList(contact.id, `${contact.firstName} ${contact.lastName}`)} className="bg-destructive hover:bg-destructive/90">Remove</AlertDialogAction>
+                                                                        <AlertDialogAction onClick={() => handleRemoveSelectedFromList()} className="bg-destructive hover:bg-destructive/90">Remove</AlertDialogAction>
                                                                     </AlertDialogFooter>
                                                                 </AlertDialogContent>
                                                             </AlertDialog>
@@ -584,114 +423,45 @@ export default function ContactListPage() {
                     </CardContent>
                 </Card>
             </div>
-            {!list.isSystemList && (
-                <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogStateChange}>
-                    <DialogContent className="sm:max-w-[425px]">
-                        <DialogHeader>
-                            <DialogTitle>Edit contact</DialogTitle>
-                            <DialogDescription>
-                            Update the details for {selectedContact?.firstName} {selectedContact?.lastName}. Click save when you're done.
-                            </DialogDescription>
-                        </DialogHeader>
-                        <Form {...form}>
-                            <form onSubmit={form.handleSubmit(handleEditSubmit)} className="space-y-4 py-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <FormField
-                                        control={form.control}
-                                        name="firstName"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>First Name</FormLabel>
-                                                <FormControl>
-                                                    <Input placeholder="John" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                    <FormField
-                                        control={form.control}
-                                        name="lastName"
-                                        render={({ field }) => (
-                                            <FormItem>
-                                                <FormLabel>Last Name</FormLabel>
-                                                <FormControl>
-                                                    <Input placeholder="Doe" {...field} />
-                                                </FormControl>
-                                                <FormMessage />
-                                            </FormItem>
-                                        )}
-                                    />
-                                </div>
-                                <FormField
-                                    control={form.control}
-                                    name="email"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Email</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="contact@email.com" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="phone"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Phone</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="(555) 555-5555" {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="company"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Company</FormLabel>
-                                            <FormControl>
-                                                <Input placeholder="Acme Inc." {...field} />
-                                            </FormControl>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <FormField
-                                    control={form.control}
-                                    name="status"
-                                    render={({ field }) => (
-                                        <FormItem>
-                                            <FormLabel>Status</FormLabel>
-                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
-                                                <FormControl>
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Select a status" />
-                                                </SelectTrigger>
-                                                </FormControl>
-                                                <SelectContent>
-                                                    <SelectItem value="Subscribed">Subscribed</SelectItem>
-                                                    <SelectItem value="Unsubscribed">Unsubscribed</SelectItem>
-                                                    <SelectItem value="Bounced">Bounced</SelectItem>
-                                                </SelectContent>
-                                            </Select>
-                                            <FormMessage />
-                                        </FormItem>
-                                    )}
-                                />
-                                <DialogFooter>
-                                    <Button type="submit">Save changes</Button>
-                                </DialogFooter>
-                            </form>
-                        </Form>
-                    </DialogContent>
-                </Dialog>
-            )}
+            
+            <Dialog open={isEditDialogOpen} onOpenChange={handleEditDialogStateChange}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Edit contact</DialogTitle>
+                        <DialogDescription>
+                        Update the details for {selectedContact?.firstName} {selectedContact?.lastName}. Click save when you're done.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(handleEditSubmit)} className="space-y-4 py-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <FormField control={form.control} name="firstName" render={({ field }) => ( <FormItem><FormLabel>First Name</FormLabel><FormControl><Input placeholder="John" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                                <FormField control={form.control} name="lastName" render={({ field }) => ( <FormItem><FormLabel>Last Name</FormLabel><FormControl><Input placeholder="Doe" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            </div>
+                            <FormField control={form.control} name="email" render={({ field }) => ( <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="contact@email.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem><FormLabel>Phone</FormLabel><FormControl><Input placeholder="(555) 555-5555" {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            <FormField control={form.control} name="company" render={({ field }) => ( <FormItem><FormLabel>Company</FormLabel><FormControl><Input placeholder="Acme Inc." {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            <FormField control={form.control} name="status" render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Status</FormLabel>
+                                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                        <FormControl><SelectTrigger><SelectValue placeholder="Select a status" /></SelectTrigger></FormControl>
+                                        <SelectContent>
+                                            <SelectItem value="Subscribed">Subscribed</SelectItem>
+                                            <SelectItem value="Unsubscribed">Unsubscribed</SelectItem>
+                                            <SelectItem value="Bounced">Bounced</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                    <FormMessage />
+                                </FormItem>
+                            )} />
+                            <DialogFooter>
+                                <Button type="submit">Save changes</Button>
+                            </DialogFooter>
+                        </form>
+                    </Form>
+                </DialogContent>
+            </Dialog>
 
             <AlertDialog open={isConfirmCloseOpen} onOpenChange={setIsConfirmCloseOpen}>
                 <AlertDialogContent>

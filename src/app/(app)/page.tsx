@@ -3,7 +3,7 @@
 
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart, CartesianGrid, ResponsiveContainer, XAxis, YAxis, Tooltip, Bar } from "recharts";
+import { BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from "recharts";
 import { ArrowUpRight, Users, Mail, BarChart2, Rocket } from "lucide-react";
 import { ChartTooltipContent, ChartContainer } from "@/components/ui/chart";
 import Link from "next/link";
@@ -11,26 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const CAMPAIGNS_KEY = 'campaigns';
-const CONTACT_LISTS_KEY = 'contactLists';
-const CONTACTS_BY_LIST_KEY = 'contactsByList';
-
-type Campaign = {
-    id: string;
-    name: string;
-    status: string;
-    sentDate?: string;
-    openRate: string;
-    clickRate: string;
-};
-
-type ContactList = {
-    id: string;
-    name: string;
-    count: number;
-    isMasterList?: boolean;
-};
+import { getDashboardData } from "@/lib/actions";
+import type { Campaign } from "@/lib/types";
 
 const chartConfig = {
   sent: {
@@ -71,67 +53,22 @@ export default function Dashboard() {
   const [chartData, setChartData] = React.useState<any[]>([]);
 
   React.useEffect(() => {
-    try {
-      const storedCampaignsRaw = localStorage.getItem(CAMPAIGNS_KEY);
-      const storedContactListsRaw = localStorage.getItem(CONTACT_LISTS_KEY);
-      
-      const campaigns: Campaign[] = storedCampaignsRaw ? JSON.parse(storedCampaignsRaw) : [];
-      const contactLists: ContactList[] = storedContactListsRaw ? JSON.parse(storedContactListsRaw) : [];
-
-      // Calculate Total Subscribers
-      const masterList = contactLists.find(l => l.isMasterList);
-      setTotalSubscribers(masterList?.count || 0);
-      
-      const sentCampaigns = campaigns.filter(c => c.status === 'Sent');
-
-      // Calculate Average Rates
-      if (sentCampaigns.length > 0) {
-        const totalOpenRate = sentCampaigns.reduce((acc, c) => acc + parseFloat(c.openRate), 0);
-        const totalClickRate = sentCampaigns.reduce((acc, c) => acc + parseFloat(c.clickRate), 0);
-        setAvgOpenRate(`${(totalOpenRate / sentCampaigns.length).toFixed(1)}%`);
-        setAvgClickRate(`${(totalClickRate / sentCampaigns.length).toFixed(1)}%`);
+    async function fetchData() {
+      try {
+        const data = await getDashboardData();
+        setTotalSubscribers(data.totalSubscribers);
+        setAvgOpenRate(data.avgOpenRate);
+        setAvgClickRate(data.avgClickRate);
+        setCampaignsSent(data.campaignsSentLast30Days);
+        setRecentCampaigns(data.recentCampaigns);
+        setChartData(data.chartData);
+      } catch (error) {
+        console.error("Failed to load dashboard data", error);
+      } finally {
+        setLoading(false);
       }
-
-      // Calculate Campaigns Sent in last 30 days
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const recentSent = sentCampaigns.filter(c => c.sentDate && new Date(c.sentDate) > thirtyDaysAgo);
-      setCampaignsSent(recentSent.length);
-
-      // Get Recent Campaigns
-      setRecentCampaigns([...campaigns].reverse().slice(0, 5));
-
-      // Generate Chart Data (mock logic for now, could be enhanced)
-       const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-       const monthlyData: {[key: string]: { sent: number, opened: number }} = {};
-       
-       sentCampaigns.forEach(c => {
-         if (c.sentDate) {
-           const month = new Date(c.sentDate).getMonth();
-           const monthName = monthNames[month];
-           if (!monthlyData[monthName]) {
-             monthlyData[monthName] = { sent: 0, opened: 0 };
-           }
-           monthlyData[monthName].sent += 1;
-           // This is a mock calculation for opened
-           if (Math.random() < parseFloat(c.openRate) / 100) {
-             monthlyData[monthName].opened += 1;
-           }
-         }
-       });
-
-       const generatedChartData = monthNames.map(month => ({
-         month,
-         sent: monthlyData[month]?.sent || 0,
-         opened: monthlyData[month]?.opened || 0,
-       })).slice(0, 6); // Display first 6 months for example
-       setChartData(generatedChartData);
-
-    } catch (error) {
-      console.error("Failed to load dashboard data from localStorage", error);
-    } finally {
-      setLoading(false);
     }
+    fetchData();
   }, []);
 
   if (loading) {

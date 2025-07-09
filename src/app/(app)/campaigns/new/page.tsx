@@ -42,23 +42,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { sendCampaignEmail } from "@/actions/send-email";
-
-
-// Mock data, in a real app this would come from an API
-const allContactLists = [
-  { id: '1', name: 'Newsletter Subscribers (1,250)', value: 'list_1' },
-  { id: '2', name: 'Q2 Webinar Attendees (320)', value: 'list_2' },
-  { id: '3', name: 'High-Value Customers (85)', value: 'list_3' },
-  { id: '4', name: 'New Signups (Last 30 Days) (450)', value: 'list_4' },
-  { id: 'unsubscribes', name: 'Unsubscribes', value: 'list_unsub', isSystemList: true },
-  { id: 'bounces', name: 'Bounced Emails', value: 'list_bounces', isSystemList: true },
-];
-
-const mailingLists = allContactLists.filter(list => !list.isSystemList);
-const CAMPAIGNS_KEY = 'campaigns';
-const SETTINGS_KEY = 'appSettings';
-const CONTACTS_BY_LIST_KEY = 'contactsByList';
+import { getCampaignById, getContactLists, getSettings, saveCampaign, saveTemplate } from "@/lib/actions";
+import type { ContactList, Settings } from "@/lib/types";
 
 
 const campaignFormSchema = z.object({
@@ -67,6 +52,8 @@ const campaignFormSchema = z.object({
   subject: z.string().min(5, { message: "Subject must be at least 5 characters." }).or(z.literal("")),
   emailBody: z.string().min(1, { message: "Email body cannot be empty." }).refine(
     (html) => {
+        // This validation should only trigger if the user is trying to send/schedule, not just saving a draft
+        // The check for other fields being empty is a proxy for "is this a real submission attempt?"
         if (form.getValues('name') === '' && form.getValues('recipientListId') === '' && form.getValues('subject') === '') {
             return true;
         }
@@ -81,8 +68,6 @@ const campaignFormSchema = z.object({
 
 type CampaignFormValues = z.infer<typeof campaignFormSchema>;
 
-const TEMPLATES_STORAGE_KEY = 'emailTemplates';
-
 const googleFonts = [
     { name: 'Roboto', family: 'sans-serif' }, { name: 'Open Sans', family: 'sans-serif' },
     { name: 'Lato', family: 'sans-serif' }, { name: 'Montserrat', family: 'sans-serif' },
@@ -95,18 +80,14 @@ const googleFonts = [
     { name: 'Arvo', family: 'serif' }, { name: 'Noticia Text', family: 'serif' },
     { name: 'Inter', family: 'sans-serif' }, { name: 'Space Grotesk', family: 'sans-serif' },
 ];
-
 const fontSizes = ['10px', '12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px', '48px'];
-
 const colors = [
   '#000000', '#444444', '#666666', '#999999', '#CCCCCC', '#FFFFFF', 
   '#FF0000', '#FF9900', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', 
   '#9900FF', '#FF00FF', '#F44E3B', '#D9E3F0', '#68BC00', '#009CE0', 
   '#E53935', '#C2185B'
 ];
-
 const emojis = ['😀', '😂', '😍', '🤔', '👍', '❤️', '🚀', '🎉', '🔥', '💡', '💯', '🙏', '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯'];
-
 const personalizationTags = [
   { label: 'First Name', value: '[FirstName]' },
   { label: 'Last Name', value: '[LastName]' },
@@ -137,6 +118,7 @@ export default function NewCampaignPage() {
   const [date, setDate] = React.useState<Date>();
   const editorRef = React.useRef<HTMLDivElement>(null);
   const [isSending, setIsSending] = React.useState(false);
+  const [mailingLists, setMailingLists] = React.useState<ContactList[]>([]);
   
   const [dividerColor, setDividerColor] = React.useState('#cccccc');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = React.useState(false);
@@ -176,13 +158,19 @@ export default function NewCampaignPage() {
   const emailBackgroundColor = form.watch("emailBackgroundColor");
 
   React.useEffect(() => {
+    async function loadData() {
+        const lists = await getContactLists();
+        setMailingLists(lists.filter(l => !l.isSystemList));
+    }
+    loadData();
+  }, []);
+
+  React.useEffect(() => {
     const id = searchParams.get('id');
     if (id) {
         setCampaignId(id);
-        const storedCampaigns = localStorage.getItem(CAMPAIGNS_KEY);
-        if (storedCampaigns) {
-            const campaigns = JSON.parse(storedCampaigns);
-            const campaignToEdit = campaigns.find((c: any) => c.id === id);
+        const fetchCampaign = async () => {
+            const campaignToEdit = await getCampaignById(id);
             if (campaignToEdit) {
                 form.reset({
                     ...campaignToEdit,
@@ -191,8 +179,12 @@ export default function NewCampaignPage() {
                 if (campaignToEdit.scheduledAt) {
                     setDate(new Date(campaignToEdit.scheduledAt));
                 }
+            } else {
+                toast({ variant: 'destructive', title: "Error", description: "Campaign not found."});
+                router.push('/campaigns');
             }
-        }
+        };
+        fetchCampaign();
     } else {
         const templateContent = sessionStorage.getItem('selectedTemplateContent');
         if (templateContent) {
@@ -200,13 +192,13 @@ export default function NewCampaignPage() {
           sessionStorage.removeItem('selectedTemplateContent');
         }
     }
-  }, [searchParams, form]);
+  }, [searchParams, form, router, toast]);
 
   React.useEffect(() => { form.setValue("scheduledAt", date); }, [date, form]);
   
   React.useEffect(() => {
     if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
-      const isContentDifferent = (emailBodyValue || '').replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
+      const isContentDifferent = (emailBodyValue || '').replace(/&nbsp;/g, ' ') !== (editorRef.current.innerHTML || '').replace(/&nbsp;/g, ' ');
       if (isContentDifferent) { editorRef.current.innerHTML = emailBodyValue || ''; }
     }
   }, [emailBodyValue]);
@@ -366,7 +358,7 @@ export default function NewCampaignPage() {
 
   function handleEmojiClick(emoji: string) { applyFormat('insertText', emoji); }
 
-  const handleSaveTemplate = () => {
+  const handleSaveTemplate = async () => {
     const emailBody = form.getValues("emailBody");
     if (!templateName.trim()) {
       toast({ variant: "destructive", title: "Template name required", description: "Please enter a name for your template." });
@@ -377,138 +369,55 @@ export default function NewCampaignPage() {
       return;
     }
     try {
-      const storedTemplatesRaw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-      const existingTemplates = storedTemplatesRaw ? JSON.parse(storedTemplatesRaw) : [];
-      const newTemplate = { id: crypto.randomUUID(), name: templateName, content: emailBody };
-      const updatedTemplates = [...existingTemplates, newTemplate];
-      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+      await saveTemplate({ name: templateName, content: emailBody });
       toast({ title: "Template Saved!", description: `Your template "${templateName}" has been saved.` });
       setTemplateName("");
       setIsSaveTemplateOpen(false);
     } catch (error) {
-      console.error("Failed to save template to localStorage", error);
+      console.error("Failed to save template", error);
       toast({ variant: "destructive", title: "Error saving template", description: "Could not save the template. Please try again." });
     }
   };
 
-  async function onSubmit(data: CampaignFormValues, statusOverride?: 'Draft') {
-    const isEditing = !!campaignId;
+  async function handleFormSubmit(data: CampaignFormValues, statusOverride?: 'Draft') {
+    setIsSending(true);
     let status = statusOverride ? 'Draft' : (data.scheduledAt ? "Scheduled" : "Sent");
     
-    let finalEmailBody = data.emailBody || '';
-
-    if (status === 'Sent' || status === 'Scheduled') {
-        let companyName = "RyFi Media LLC";
-        let companyAddress = "PO Box 157, Colton, OR 97017";
-        
-        try {
-            const settingsRaw = localStorage.getItem(SETTINGS_KEY);
-            if (settingsRaw) {
-                const settings = JSON.parse(settingsRaw);
-                companyName = settings.profile?.companyName || companyName;
-                companyAddress = settings.profile?.address || companyAddress;
-            }
-        } catch (e) {
-            console.error("Could not parse settings for footer.", e)
-        }
-        
-        const footer = `
-            <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-              <p style="margin: 0 0 5px 0;">Copyright 2025 ${companyName}, All rights reserved.</p>
-              <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-              <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
-              <p style="margin: 0;">
-                <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
-                <span style="padding: 0 5px;">|</span>
-                <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
-              </p>
-            </div>
-        `;
-        finalEmailBody += footer;
-    }
-
-    const contactsByListRaw = localStorage.getItem(CONTACTS_BY_LIST_KEY);
-    const contactsByList = contactsByListRaw ? JSON.parse(contactsByListRaw) : {};
-    const recipientList = contactsByList[data.recipientListId] || [];
-
-    if (status === 'Sent') {
-        setIsSending(true);
-        try {
-            const settingsRaw = localStorage.getItem(SETTINGS_KEY);
-            const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
-            const fromName = settings.defaults?.fromName || "RyFi Media LLC";
-            const fromEmail = settings.defaults?.fromEmail || `hello@ryfimedia.com`;
-            const fromAddress = `${fromName} <${fromEmail}>`;
-
-            const recipientEmails = recipientList.map((c: any) => c.email);
-
-            if (recipientEmails.length === 0) {
-                toast({ variant: "destructive", title: "Send Error", description: "No recipients in the selected list. Campaign saved as draft." });
-                status = 'Draft';
-            } else {
-                const sendResult = await sendCampaignEmail({
-                  from: fromAddress,
-                  to: recipientEmails,
-                  subject: data.subject || 'No Subject',
-                  html: finalEmailBody,
-                });
-
-                if (sendResult.error) {
-                    toast({ variant: "destructive", title: "Send Error", description: `Could not send campaign: ${sendResult.error}. It has been saved as a draft.` });
-                    status = 'Draft';
-                }
-            }
-        } catch (e) {
-            console.error("Error during email sending process:", e);
-            toast({ variant: "destructive", title: "Send Error", description: "An unexpected error occurred. Campaign saved as draft." });
-            status = 'Draft';
-        } finally {
-            setIsSending(false);
-        }
-    }
-    
-    const campaignData = {
-      id: isEditing ? campaignId : crypto.randomUUID(),
-      name: data.name,
-      recipientListId: data.recipientListId,
-      subject: data.subject,
-      emailBody: finalEmailBody,
-      emailBackgroundColor: data.emailBackgroundColor,
-      scheduledAt: data.scheduledAt ? data.scheduledAt.toISOString() : undefined,
-      status,
-      sentDate: status === 'Sent' ? new Date().toISOString() : (data.scheduledAt ? data.scheduledAt.toISOString() : undefined),
-      openRate: status === 'Sent' ? '0.0%' : '-',
-      clickRate: status === 'Sent' ? '0.0%' : '-',
-      recipients: status === 'Sent' ? recipientList.length : undefined,
-      successfulDeliveries: status === 'Sent' ? recipientList.length : undefined, // Assume success for proto
-      bounces: status === 'Sent' ? 0 : undefined,
-      unsubscribes: status === 'Sent' ? 0 : undefined,
+    let finalData: any = {
+        ...data,
+        id: campaignId, // if null, a new one will be created by the action
+        status: status,
     };
-
+    
     try {
-      const storedCampaignsRaw = localStorage.getItem(CAMPAIGNS_KEY);
-      const existingCampaigns = storedCampaignsRaw ? JSON.parse(storedCampaignsRaw) : [];
-      let updatedCampaigns;
-      if (isEditing) {
-        updatedCampaigns = existingCampaigns.map((c: any) => c.id === campaignId ? { ...c, ...campaignData } : c);
-      } else {
-        updatedCampaigns = [...existingCampaigns, campaignData];
-      }
-      localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(updatedCampaigns));
+        const result = await saveCampaign(finalData);
 
-      const action = status === 'Draft' ? 'saved as a draft' : (status === 'Scheduled' ? 'scheduled' : 'sent');
-      toast({ title: `Campaign ${isEditing ? 'Updated' : 'Created'}!`, description: `Your email campaign has been successfully ${action}.` });
-      router.push('/campaigns');
-    } catch (error) {
-       console.error("Failed to save campaign to localStorage", error);
-       toast({ variant: "destructive", title: "Error saving campaign", description: "Could not save the campaign. Please try again." });
+        if (result.error) {
+             toast({ variant: "destructive", title: "Error", description: result.error });
+             // If sending failed, revert status to Draft
+             if (status === 'Sent') {
+                finalData.status = 'Draft';
+                await saveCampaign(finalData);
+                toast({ title: "Campaign Saved as Draft", description: "The campaign could not be sent but has been saved as a draft." });
+             }
+        } else {
+            const action = status === 'Draft' ? 'saved as a draft' : (status === 'Scheduled' ? 'scheduled' : 'sent');
+            toast({ title: `Campaign ${campaignId ? 'Updated' : 'Created'}!`, description: `Your email campaign has been successfully ${action}.` });
+            router.push('/campaigns');
+        }
+
+    } catch(error) {
+        console.error("Failed to save campaign:", error);
+        toast({ variant: "destructive", title: "An unexpected error occurred", description: "Could not save the campaign." });
+    } finally {
+        setIsSending(false);
     }
   }
 
   const handleSendOrSchedule = async () => {
     const isValid = await form.trigger();
     if (isValid) {
-      await onSubmit(form.getValues());
+      await handleFormSubmit(form.getValues());
     } else {
       toast({
         variant: "destructive",
@@ -524,7 +433,7 @@ export default function NewCampaignPage() {
       form.setValue("name", "Untitled Draft");
       data.name = "Untitled Draft";
     }
-    onSubmit(data, 'Draft');
+    handleFormSubmit(data, 'Draft');
   };
 
   const pageTitle = campaignId ? "Edit Campaign" : "New Campaign";
@@ -535,13 +444,13 @@ export default function NewCampaignPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold font-headline">{pageTitle}</h1>
           <div className="flex gap-2">
-            <Button variant="outline" type="button" onClick={handleSaveDraft}>
+            <Button variant="outline" type="button" onClick={handleSaveDraft} disabled={isSending}>
               <Save className="mr-2 h-4 w-4" />
               Save as Draft
             </Button>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline">
+                <Button variant="outline" disabled={isSending}>
                   <Calendar className="mr-2 h-4 w-4" />
                   {date ? format(date, "MM/dd/yyyy") : <span>Schedule Send</span>}
                 </Button>
@@ -595,7 +504,7 @@ export default function NewCampaignPage() {
                         </FormControl>
                         <SelectContent>
                           {mailingLists.map((list) => (
-                            <SelectItem key={list.id} value={list.value}>
+                            <SelectItem key={list.id} value={list.id}>
                               {list.name}
                             </SelectItem>
                           ))}

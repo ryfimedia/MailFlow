@@ -29,12 +29,13 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
+import { saveTemplate } from "@/lib/actions";
 
 const templateFormSchema = z.object({
   name: z.string().min(3, { message: "Template name must be at least 3 characters." }),
   emailBody: z.string().min(1, { message: "Email body cannot be empty." }).refine(
     (html) => {
-        const textContent = html.replace(/<[^>]*>/g, '').trim();
+        const textContent = (html || "").replace(/<[^>]*>/g, '').trim();
         return textContent.length >= 20;
     },
     { message: "Email body must contain at least 20 characters of text." }
@@ -44,46 +45,27 @@ const templateFormSchema = z.object({
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
 
-const TEMPLATES_STORAGE_KEY = 'emailTemplates';
-
 // Mock data for editor controls
 const googleFonts = [
-    { name: 'Roboto', family: 'sans-serif' },
-    { name: 'Open Sans', family: 'sans-serif' },
-    { name: 'Lato', family: 'sans-serif' },
-    { name: 'Montserrat', family: 'sans-serif' },
-    { name: 'Oswald', family: 'sans-serif' },
-    { name: 'Raleway', family: 'sans-serif' },
-    { name: 'Poppins', family: 'sans-serif' },
-    { name: 'Nunito Sans', family: 'sans-serif' },
-    { name: 'Merriweather', family: 'serif' },
-    { name: 'Playfair Display', family: 'serif' },
-    { name: 'Lora', family: 'serif' },
-    { name: 'PT Serif', family: 'serif' },
-    { name: 'Crimson Text', family: 'serif' },
-    { name: 'EB Garamond', family: 'serif' },
-    { name: 'Domine', family: 'serif' },
-    { name: 'Bitter', family: 'serif' },
-    { name: 'Arvo', family: 'serif' },
-    { name: 'Noticia Text', family: 'serif' },
-    { name: 'Inter', family: 'sans-serif' },
-    { name: 'Space Grotesk', family: 'sans-serif' },
+    { name: 'Roboto', family: 'sans-serif' }, { name: 'Open Sans', family: 'sans-serif' },
+    { name: 'Lato', family: 'sans-serif' }, { name: 'Montserrat', family: 'sans-serif' },
+    { name: 'Oswald', family: 'sans-serif' }, { name: 'Raleway', family: 'sans-serif' },
+    { name: 'Poppins', family: 'sans-serif' }, { name: 'Nunito Sans', family: 'sans-serif' },
+    { name: 'Merriweather', family: 'serif' }, { name: 'Playfair Display', family: 'serif' },
+    { name: 'Lora', family: 'serif' }, { name: 'PT Serif', family: 'serif' },
+    { name: 'Crimson Text', family: 'serif' }, { name: 'EB Garamond', family: 'serif' },
+    { name: 'Domine', family: 'serif' }, { name: 'Bitter', family: 'serif' },
+    { name: 'Arvo', family: 'serif' }, { name: 'Noticia Text', family: 'serif' },
+    { name: 'Inter', family: 'sans-serif' }, { name: 'Space Grotesk', family: 'sans-serif' },
 ];
-
 const fontSizes = ['10px', '12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px', '48px'];
-
 const colors = [
   '#000000', '#444444', '#666666', '#999999', '#CCCCCC', '#FFFFFF', 
   '#FF0000', '#FF9900', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', 
   '#9900FF', '#FF00FF', '#F44E3B', '#D9E3F0', '#68BC00', '#009CE0', 
   '#E53935', '#C2185B'
 ];
-
-const emojis = [
-    '😀', '😂', '😍', '🤔', '👍', '❤️', '🚀', '🎉', '🔥', '💡', '💯', '🙏',
-    '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯',
-];
-
+const emojis = ['😀', '😂', '😍', '🤔', '👍', '❤️', '🚀', '🎉', '🔥', '💡', '💯', '🙏', '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯'];
 const personalizationTags = [
   { label: 'First Name', value: '[FirstName]' },
   { label: 'Last Name', value: '[LastName]' },
@@ -162,7 +144,7 @@ export default function NewTemplatePage() {
 
   React.useEffect(() => {
     if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
-      const isContentDifferent = (emailBodyValue || '').replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
+      const isContentDifferent = (emailBodyValue || '').replace(/&nbsp;/g, ' ') !== (editorRef.current.innerHTML || '').replace(/&nbsp;/g, ' ');
       if (isContentDifferent) {
           editorRef.current.innerHTML = emailBodyValue || '';
       }
@@ -363,19 +345,12 @@ export default function NewTemplatePage() {
     applyFormat('insertText', emoji);
   }
 
-  function onSubmit(data: TemplateFormValues) {
+  async function onSubmit(data: TemplateFormValues) {
     try {
-      const storedTemplatesRaw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-      const existingTemplates = storedTemplatesRaw ? JSON.parse(storedTemplatesRaw) : [];
-
-      const newTemplate = {
-        id: crypto.randomUUID(),
+      await saveTemplate({
         name: data.name,
         content: data.emailBody,
-      };
-      
-      const updatedTemplates = [...existingTemplates, newTemplate];
-      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+      });
 
       toast({
         title: "Template Saved!",
@@ -383,7 +358,7 @@ export default function NewTemplatePage() {
       });
       router.push('/templates');
     } catch (error) {
-      console.error("Failed to save template to localStorage", error);
+      console.error("Failed to save template", error);
       toast({
         variant: "destructive",
         title: "Error saving template",
@@ -397,7 +372,7 @@ export default function NewTemplatePage() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold font-headline">New Template</h1>
-          <Button type="submit" disabled={!form.formState.isValid} className="bg-accent text-accent-foreground hover:bg-accent/90">
+          <Button type="submit" disabled={!form.formState.isValid || form.formState.isSubmitting} className="bg-accent text-accent-foreground hover:bg-accent/90">
             <Save className="mr-2 h-4 w-4" />
             Save Template
           </Button>

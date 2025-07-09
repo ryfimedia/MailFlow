@@ -7,78 +7,17 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MoreVertical, PlusCircle, UploadCloud, Users, ShieldOff, MailWarning, ListPlus } from "lucide-react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { MoreVertical, PlusCircle, UploadCloud, Users, ShieldOff, MailWarning, ListPlus, Loader2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import Papa from 'papaparse';
 import { Separator } from "@/components/ui/separator";
-
-
-// Mock data and types - in a real app, these would be defined in a shared types file
-type Contact = {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone?: string;
-    company?: string;
-    status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
-    subscribedAt: string;
-};
-
-type ContactList = {
-  id: string;
-  name: string;
-  count: number;
-  createdAt: string;
-  isSystemList: boolean;
-  isMasterList?: boolean;
-};
-
-// Initial data to populate localStorage if it's empty
-const initialContactLists: ContactList[] = [
-  { id: 'all', name: 'All Subscribers', count: 1842, createdAt: 'System Managed', isSystemList: true, isMasterList: true },
-  { id: '1', name: 'Newsletter Subscribers', count: 1250, createdAt: '2023-08-15', isSystemList: false },
-  { id: '2', name: 'Q2 Webinar Attendees', count: 320, createdAt: '2023-06-20', isSystemList: false },
-  { id: '3', name: 'High-Value Customers', count: 85, createdAt: '2023-09-01', isSystemList: false },
-  { id: '4', name: 'New Signups (Last 30 Days)', count: 450, createdAt: '2023-09-10', isSystemList: false },
-  { id: 'unsubscribes', name: 'Unsubscribes', count: 37, createdAt: 'System Managed', isSystemList: true },
-  { id: 'bounces', name: 'Bounced Emails', count: 25, createdAt: 'System Managed', isSystemList: true },
-];
-
-const initialContactsByList = {
-    '1': Array.from({ length: 1250 }, (_, i) => ({ id: `contact_${i + 1}`, firstName: `Subscriber`, lastName: `${i + 1}`, email: `subscriber.${i + 1}@example.com`, status: 'Subscribed', subscribedAt: '2023-10-01' })),
-    '2': Array.from({ length: 320 }, (_, i) => ({ id: `webinar_${i + 1}`, firstName: `Attendee`, lastName: `${i + 1}`, email: `attendee.${i + 1}@example.com`, status: 'Subscribed', subscribedAt: '2023-06-21' })),
-    '3': Array.from({ length: 85 }, (_, i) => ({ id: `customer_${i + 1}`, firstName: `Valued`, lastName: `Customer ${i + 1}`, email: `customer.${i + 1}@example.com`, status: 'Subscribed', subscribedAt: '2023-09-02' })),
-    '4': Array.from({ length: 450 }, (_, i) => ({ id: `signup_${i + 1}`, firstName: `New`, lastName: `User ${i + 1}`, email: `newuser.${i + 1}@example.com`, status: 'Subscribed', subscribedAt: '2023-09-15' })),
-    'unsubscribes': Array.from({ length: 37 }, (_, i) => ({ id: `unsub_${i + 1}`, firstName: `Former`, lastName: `Subscriber ${i + 1}`, email: `unsubscribed.${i + 1}@example.com`, status: 'Unsubscribed', subscribedAt: '2023-01-15' })),
-    'bounces': Array.from({ length: 25 }, (_, i) => ({ id: `bounce_${i + 1}`, firstName: `Bounced`, lastName: `User ${i + 1}`, email: `bounced.${i + 1}@example.com`, status: 'Bounced', subscribedAt: '2023-03-10' })),
-};
-// 'all' list is dynamically generated from others in a real app, here we just sum them up for display.
-initialContactsByList['all'] = [...initialContactsByList['1'], ...initialContactsByList['2'], ...initialContactsByList['3'], ...initialContactsByList['4']];
-initialContactLists.find(l => l.id === 'all')!.count = initialContactsByList['all'].length;
-
-
-const CONTACT_LISTS_KEY = 'contactLists';
-const CONTACTS_BY_LIST_KEY = 'contactsByList';
+import type { ContactList } from "@/lib/types";
+import { getContactLists, createList, renameList, deleteList, importContacts } from "@/lib/actions";
 
 const APP_CONTACT_FIELDS = [
   { key: 'email', label: 'Email Address', required: true },
@@ -99,6 +38,7 @@ const listIcons: { [key: string]: React.ElementType } = {
 export default function ContactsPage() {
   const [lists, setLists] = React.useState<ContactList[]>([]);
   const { toast } = useToast();
+  const [loading, setLoading] = React.useState(true);
 
   const [isCreateListOpen, setCreateListOpen] = React.useState(false);
   const [newListName, setNewListName] = React.useState("");
@@ -108,53 +48,45 @@ export default function ContactsPage() {
   const [renamedListName, setRenamedListName] = React.useState("");
   
   const [isUploadModalOpen, setUploadModalOpen] = React.useState(false);
+  const [isUploading, setIsUploading] = React.useState(false);
   const [file, setFile] = React.useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = React.useState<string[]>([]);
   const [columnMapping, setColumnMapping] = React.useState<Record<string, string>>({});
   const [uploadOption, setUploadOption] = React.useState('new');
   const [uploadNewListName, setUploadNewListName] = React.useState('');
   const [uploadTargetListId, setUploadTargetListId] = React.useState('');
+  
+  const fetchLists = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      const fetchedLists = await getContactLists();
+      setLists(fetchedLists);
+    } catch (error) {
+      console.error("Failed to fetch contact lists", error);
+      toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch contact lists.' });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
 
   React.useEffect(() => {
-    try {
-      const storedLists = localStorage.getItem(CONTACT_LISTS_KEY);
-      const storedContacts = localStorage.getItem(CONTACTS_BY_LIST_KEY);
-      if (storedLists && storedContacts) {
-        setLists(JSON.parse(storedLists));
-      } else {
-        localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(initialContactLists));
-        localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(initialContactsByList));
-        setLists(initialContactLists);
-      }
-    } catch (error) {
-      console.error("Failed to initialize contact lists from localStorage", error);
-      setLists(initialContactLists);
-    }
-  }, []);
+    fetchLists();
+  }, [fetchLists]);
 
-  const handleCreateList = () => {
+  const handleCreateList = async () => {
     if (newListName.trim().length < 2) {
       toast({ variant: 'destructive', title: 'Invalid Name', description: 'List name must be at least 2 characters.' });
       return;
     }
-    const newList: ContactList = {
-      id: crypto.randomUUID(),
-      name: newListName,
-      count: 0,
-      createdAt: new Date().toISOString().split('T')[0],
-      isSystemList: false,
-    };
-    const updatedLists = [...lists, newList];
-    setLists(updatedLists);
-    localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-
-    const contactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-    contactsByList[newList.id] = [];
-    localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
-
-    toast({ title: 'List Created!', description: `"${newListName}" has been created.` });
-    setNewListName('');
-    setCreateListOpen(false);
+    try {
+      await createList(newListName);
+      toast({ title: 'List Created!', description: `"${newListName}" has been created.` });
+      setNewListName('');
+      setCreateListOpen(false);
+      fetchLists();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to create list.' });
+    }
   };
   
   const handleRenameClick = (list: ContactList) => {
@@ -163,31 +95,31 @@ export default function ContactsPage() {
     setRenameListOpen(true);
   };
   
-  const handleRenameList = () => {
+  const handleRenameList = async () => {
     if (!listToRename || renamedListName.trim().length < 2) {
       toast({ variant: 'destructive', title: 'Invalid Name', description: 'List name must be at least 2 characters.' });
       return;
     }
-    const updatedLists = lists.map(l => l.id === listToRename.id ? { ...l, name: renamedListName } : l);
-    setLists(updatedLists);
-    localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-
-    toast({ title: 'List Renamed!', description: `The list has been renamed to "${renamedListName}".` });
-    setRenamedListName('');
-    setListToRename(null);
-    setRenameListOpen(false);
+    try {
+      await renameList(listToRename.id, renamedListName);
+      toast({ title: 'List Renamed!', description: `The list has been renamed to "${renamedListName}".` });
+      setRenamedListName('');
+      setListToRename(null);
+      setRenameListOpen(false);
+      fetchLists();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to rename list.' });
+    }
   };
 
-  const handleDeleteList = (listId: string) => {
-    const updatedLists = lists.filter(l => l.id !== listId);
-    setLists(updatedLists);
-    localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-
-    const contactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-    delete contactsByList[listId];
-    localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
-
-    toast({ title: 'List Deleted', description: 'The contact list has been removed.' });
+  const handleDeleteList = async (listId: string) => {
+    try {
+      await deleteList(listId);
+      toast({ title: 'List Deleted', description: 'The contact list has been removed.' });
+      fetchLists();
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete list.' });
+    }
   };
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -247,93 +179,25 @@ export default function ContactsPage() {
         toast({ variant: 'destructive', title: 'Email Column Required', description: 'Please map the Email Address field to a column from your CSV.' });
         return;
     }
+    
+    setIsUploading(true);
 
     Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
-        complete: (results) => {
+        complete: async (results) => {
             const parsedContacts = results.data as Array<Record<string, string>>;
 
             try {
-                const contactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-                const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
-                
-                let targetListId = '';
-                let targetListName = '';
-
-                if (uploadOption === 'new') {
-                    targetListName = uploadNewListName;
-                    const newList: ContactList = {
-                        id: crypto.randomUUID(),
-                        name: targetListName,
-                        count: 0,
-                        createdAt: new Date().toISOString().split('T')[0],
-                        isSystemList: false,
-                    };
-                    targetListId = newList.id;
-                    allListsData.push(newList);
-                    contactsByList[targetListId] = [];
-                } else {
-                    targetListId = uploadTargetListId;
-                    const listInfo = allListsData.find(l => l.id === targetListId);
-                    if (!listInfo) {
-                       toast({ variant: "destructive", title: "Error", description: "Target list not found." });
-                       return;
-                    }
-                    targetListName = listInfo.name;
-                }
-
-                const targetListContacts: Contact[] = contactsByList[targetListId] || [];
-                const existingEmails = new Set(targetListContacts.map(c => c.email));
-                let newContactsAddedCount = 0;
-                let duplicatesSkippedCount = 0;
-
-                const allContactsList: Contact[] = contactsByList['all'] || [];
-                const allEmails = new Set(allContactsList.map(c => c.email));
-
-                parsedContacts.forEach(row => {
-                    const emailValue = row[columnMapping.email];
-                    if (emailValue) {
-                        const sanitizedEmail = emailValue.trim().toLowerCase();
-                        if (sanitizedEmail && !existingEmails.has(sanitizedEmail)) {
-                            const newContact: Contact = {
-                                id: crypto.randomUUID(),
-                                email: sanitizedEmail,
-                                firstName: columnMapping.firstName ? row[columnMapping.firstName] || '' : '',
-                                lastName: columnMapping.lastName ? row[columnMapping.lastName] || '' : '',
-                                phone: columnMapping.phone ? row[columnMapping.phone] || '' : '',
-                                company: columnMapping.company ? row[columnMapping.company] || '' : '',
-                                status: 'Subscribed',
-                                subscribedAt: new Date().toISOString(),
-                            };
-                            targetListContacts.push(newContact);
-                            
-                            if (!allEmails.has(sanitizedEmail)) {
-                                allContactsList.push(newContact);
-                                allEmails.add(sanitizedEmail);
-                            }
-                            
-                            existingEmails.add(sanitizedEmail);
-                            newContactsAddedCount++;
-                        } else {
-                            duplicatesSkippedCount++;
-                        }
-                    }
+                const result = await importContacts({
+                    contacts: parsedContacts,
+                    columnMapping,
+                    uploadOption,
+                    uploadNewListName,
+                    uploadTargetListId
                 });
 
-                contactsByList[targetListId] = targetListContacts;
-                contactsByList['all'] = allContactsList;
-                
-                const updatedLists = allListsData.map(l => {
-                    if (l.id === targetListId || l.id === 'all') {
-                        return { ...l, count: contactsByList[l.id].length };
-                    }
-                    return l;
-                });
-                
-                localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
-                localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-                setLists(updatedLists);
+                const { newContactsAddedCount, duplicatesSkippedCount, targetListName } = result;
                 
                 const mappedHeaders = new Set(Object.values(columnMapping).filter(Boolean));
                 const allCsvHeaders = new Set(csvHeaders);
@@ -351,6 +215,8 @@ export default function ContactsPage() {
                     title: "Import Complete!",
                     description: toastDescription,
                 });
+                
+                fetchLists();
 
                 const fileInput = document.getElementById('dropzone-file') as HTMLInputElement;
                 if (fileInput) fileInput.value = "";
@@ -364,11 +230,14 @@ export default function ContactsPage() {
             } catch (error) {
                 console.error("Error processing CSV:", error);
                 toast({ variant: 'destructive', title: "An error occurred during import." });
+            } finally {
+              setIsUploading(false);
             }
         },
         error: (error: Error) => {
             console.error("CSV parsing error:", error);
             toast({ variant: 'destructive', title: "CSV Parsing Error", description: error.message });
+            setIsUploading(false);
         }
     });
   };
@@ -415,61 +284,67 @@ export default function ContactsPage() {
                       <CardDescription>Manage your contact lists and subscribers.</CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-4 md:grid-cols-2">
-                      {lists.map(list => {
-                          const Icon = listIcons[list.id] || (list.isMasterList ? listIcons['all'] : listIcons.default);
-                          return (
-                            <div key={list.id} className="relative group">
-                                <Card className={`h-full transition-all group-hover:shadow-md ${list.isSystemList ? 'bg-muted/50' : 'group-hover:border-primary/50'}`}>
-                                    <Link href={`/contacts/${list.id}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-lg">
-                                        <CardHeader className="flex flex-row items-start justify-between pb-2">
-                                            <CardTitle className="text-base font-medium">{list.name}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent>
-                                            <div className="flex items-center gap-2 text-2xl font-bold">
-                                                <Icon className="h-6 w-6 text-muted-foreground" />
-                                                {list.count.toLocaleString()}
-                                            </div>
-                                            <p className="text-xs text-muted-foreground">
-                                            {list.isSystemList ? list.createdAt : `Created on ${new Date(list.createdAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}`}
-                                            </p>
-                                        </CardContent>
-                                    </Link>
-                                </Card>
-                                {!list.isSystemList && (
-                                    <div className="absolute top-2 right-2">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
-                                                    <MoreVertical className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleRenameClick(list); }}>Rename</DropdownMenuItem>
-                                                <AlertDialog>
-                                                    <AlertDialogTrigger asChild>
-                                                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Delete List</DropdownMenuItem>
-                                                    </AlertDialogTrigger>
-                                                    <AlertDialogContent>
-                                                        <AlertDialogHeader>
-                                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                            <AlertDialogDescription>
-                                                                This action cannot be undone. This will permanently delete the "{list.name}" list. Contacts in this list will not be deleted from the system, only from this list.
-                                                            </AlertDialogDescription>
-                                                        </AlertDialogHeader>
-                                                        <AlertDialogFooter>
-                                                            <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                            <AlertDialogAction onClick={() => handleDeleteList(list.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                                        </AlertDialogFooter>
-                                                    </AlertDialogContent>
-                                                </AlertDialog>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                )}
-                            </div>
-                          )
-                      })}
+                      {loading ? (
+                          Array.from({length: 4}).map((_, i) => (
+                              <Card key={i} className="h-32"><CardContent className="h-full w-full bg-muted/50 animate-pulse rounded-lg"></CardContent></Card>
+                          ))
+                      ) : (
+                          lists.map(list => {
+                              const Icon = listIcons[list.id] || (list.isMasterList ? listIcons['all'] : listIcons.default);
+                              return (
+                                <div key={list.id} className="relative group">
+                                    <Card className={`h-full transition-all group-hover:shadow-md ${list.isSystemList ? 'bg-muted/50' : 'group-hover:border-primary/50'}`}>
+                                        <Link href={`/contacts/${list.id}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-lg">
+                                            <CardHeader className="flex flex-row items-start justify-between pb-2">
+                                                <CardTitle className="text-base font-medium">{list.name}</CardTitle>
+                                            </CardHeader>
+                                            <CardContent>
+                                                <div className="flex items-center gap-2 text-2xl font-bold">
+                                                    <Icon className="h-6 w-6 text-muted-foreground" />
+                                                    {list.count.toLocaleString()}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">
+                                                {list.isSystemList ? 'System Managed' : `Created on ${new Date(list.createdAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}`}
+                                                </p>
+                                            </CardContent>
+                                        </Link>
+                                    </Card>
+                                    {!list.isSystemList && (
+                                        <div className="absolute top-2 right-2">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
+                                                        <MoreVertical className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleRenameClick(list); }}>Rename</DropdownMenuItem>
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Delete List</DropdownMenuItem>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This action cannot be undone. This will permanently delete the "{list.name}" list. Contacts in this list will not be deleted from the system, only from this list.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleDeleteList(list.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    )}
+                                </div>
+                              )
+                          })
+                      )}
                   </CardContent>
               </Card>
           </div>
@@ -576,8 +451,11 @@ export default function ContactsPage() {
                           )}
 
                           <DialogFooter className="pt-4">
-                              <Button variant="outline" onClick={() => setUploadModalOpen(false)}>Cancel</Button>
-                              <Button onClick={handleUpload}>Import Contacts</Button>
+                              <Button variant="outline" onClick={() => setUploadModalOpen(false)} disabled={isUploading}>Cancel</Button>
+                              <Button onClick={handleUpload} disabled={isUploading}>
+                                {isUploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Import Contacts
+                              </Button>
                           </DialogFooter>
                       </DialogContent>
                    </Dialog>
