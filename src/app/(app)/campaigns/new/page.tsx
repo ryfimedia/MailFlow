@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save } from "lucide-react";
+import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -116,6 +116,15 @@ export default function NewCampaignPage() {
   const [dividerColor, setDividerColor] = React.useState('#cccccc');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = React.useState(false);
   const [templateName, setTemplateName] = React.useState("");
+  
+  const [isButtonPopoverOpen, setIsButtonPopoverOpen] = React.useState(false);
+  const [buttonText, setButtonText] = React.useState("Click Here");
+  const [buttonUrl, setButtonUrl] = React.useState("https://");
+
+  const [isBlockStylePopoverOpen, setIsBlockStylePopoverOpen] = React.useState(false);
+  const [blockBgColor, setBlockBgColor] = React.useState('#f9f9f9');
+  const [blockPadding, setBlockPadding] = React.useState('20');
+  const [blockBorder, setBlockBorder] = React.useState('1px solid #cccccc');
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -170,7 +179,7 @@ export default function NewCampaignPage() {
     if (!selection || selection.rangeCount === 0) return;
 
     const range = selection.getRangeAt(0);
-    if (range.collapsed) return; // Only apply to selected text for simplicity
+    if (range.collapsed) return;
 
     const getSelectionHtml = () => {
         const content = range.cloneContents();
@@ -181,7 +190,6 @@ export default function NewCampaignPage() {
 
     const html = getSelectionHtml();
     if (html) {
-      // Wrap the selected HTML with a span that sets the font size
       applyFormat("insertHTML", `<span style="font-size: ${size};">${html}</span>`);
     }
   };
@@ -196,6 +204,42 @@ export default function NewCampaignPage() {
   const handleInsertDivider = (height: number, color: string) => {
     const dividerHtml = `<hr style="height: ${height}px; width: 70%; margin: 16px auto; background-color: ${color}; border: 0;" /><p><br></p>`;
     applyFormat("insertHTML", dividerHtml);
+  };
+  
+  const handleInsertButton = () => {
+    if (buttonText && buttonUrl) {
+      const buttonHtml = `<p style="text-align: center; margin: 20px 0;"><a href="${buttonUrl}" target="_blank" style="background-color: #F39C12; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">${buttonText}</a></p><p><br></p>`;
+      applyFormat("insertHTML", buttonHtml);
+    }
+    setIsButtonPopoverOpen(false);
+  };
+
+  const handleStyleBlock = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+        toast({ variant: "destructive", title: "Selection required", description: "Please select text to apply block styles."});
+        return;
+    };
+    
+    const range = selection.getRangeAt(0);
+    const selectedContent = range.extractContents();
+    
+    const wrapper = document.createElement('div');
+    wrapper.style.backgroundColor = blockBgColor;
+    wrapper.style.padding = `${blockPadding}px`;
+    wrapper.style.border = blockBorder;
+    wrapper.style.borderRadius = '8px';
+    wrapper.style.margin = '16px 0';
+    wrapper.appendChild(selectedContent);
+
+    range.insertNode(wrapper);
+    selection.removeAllRanges();
+    form.setValue("emailBody", editorRef.current!.innerHTML, {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+    
+    setIsBlockStylePopoverOpen(false);
   };
 
   async function handleGenerateSubject() {
@@ -498,6 +542,52 @@ export default function NewCampaignPage() {
                                                 <Label htmlFor="divider-color-picker" className="text-xs font-medium flex-1">Color</Label>
                                                 <Input id="divider-color-picker" type="color" className="h-8 w-8 p-0 border-none" value={dividerColor} onChange={(e) => setDividerColor(e.target.value)} />
                                             </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                                 <Popover open={isButtonPopoverOpen} onOpenChange={setIsButtonPopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Insert Button" className="h-8 w-8">
+                                            <Component className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium">Button Options</p>
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="button-text" className="text-xs">Text</Label>
+                                                <Input id="button-text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} placeholder="Click Here" />
+                                                <Label htmlFor="button-url" className="text-xs">URL</Label>
+                                                <Input id="button-url" value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)} placeholder="https://" />
+                                            </div>
+                                            <Button size="sm" className="w-full" onClick={handleInsertButton}>Insert Button</Button>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                                <Popover open={isBlockStylePopoverOpen} onOpenChange={setIsBlockStylePopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Style Block" className="h-8 w-8">
+                                            <Box className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="space-y-2">
+                                            <p className="text-sm font-medium">Block Styling</p>
+                                            <div className="grid gap-2">
+                                                <div className="flex items-center gap-2">
+                                                    <Label htmlFor="block-bg-color" className="text-xs flex-1">Background</Label>
+                                                    <Input id="block-bg-color" type="color" className="h-8 w-8 p-0 border-none" value={blockBgColor} onChange={(e) => setBlockBgColor(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <Label htmlFor="block-padding" className="text-xs">Padding (px)</Label>
+                                                    <Input id="block-padding" type="number" value={blockPadding} onChange={(e) => setBlockPadding(e.target.value)} />
+                                                </div>
+                                                <div>
+                                                    <Label htmlFor="block-border" className="text-xs">Border</Label>
+                                                    <Input id="block-border" value={blockBorder} onChange={(e) => setBlockBorder(e.target.value)} placeholder="e.g. 1px solid #ccc" />
+                                                </div>
+                                            </div>
+                                            <Button size="sm" className="w-full" onClick={handleStyleBlock}>Apply Styles</Button>
                                         </div>
                                     </PopoverContent>
                                 </Popover>
