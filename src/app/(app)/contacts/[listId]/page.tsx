@@ -35,10 +35,12 @@ import { useToast } from "@/hooks/use-toast";
 
 // Mock data - in a real app, this would come from an API
 const contactLists = [
-  { id: '1', name: 'Newsletter Subscribers', count: 1250, createdAt: '2023-08-15' },
-  { id: '2', name: 'Q2 Webinar Attendees', count: 320, createdAt: '2023-06-20' },
-  { id: '3', name: 'High-Value Customers', count: 85, createdAt: '2023-09-01' },
-  { id: '4', name: 'New Signups (Last 30 Days)', count: 450, createdAt: '2023-09-10' },
+  { id: '1', name: 'Newsletter Subscribers', count: 1250, createdAt: '2023-08-15', isSystemList: false },
+  { id: '2', name: 'Q2 Webinar Attendees', count: 320, createdAt: '2023-06-20', isSystemList: false },
+  { id: '3', name: 'High-Value Customers', count: 85, createdAt: '2023-09-01', isSystemList: false },
+  { id: '4', name: 'New Signups (Last 30 Days)', count: 450, createdAt: '2023-09-10', isSystemList: false },
+  { id: 'unsubscribes', name: 'Unsubscribes', count: 37, createdAt: 'System Managed', isSystemList: true },
+  { id: 'bounces', name: 'Bounced Emails', count: 25, createdAt: 'System Managed', isSystemList: true },
 ];
 
 const contactsByList: { [key: string]: any[] } = {
@@ -70,6 +72,20 @@ const contactsByList: { [key: string]: any[] } = {
         status: 'Subscribed',
         subscribedAt: '2023-09-15',
     })),
+    'unsubscribes': Array.from({ length: 37 }, (_, i) => ({
+        id: `unsub_${i + 1}`,
+        name: `Former Subscriber ${i + 1}`,
+        email: `unsubscribed.${i + 1}@example.com`,
+        status: 'Unsubscribed',
+        subscribedAt: '2023-01-15',
+    })),
+    'bounces': Array.from({ length: 25 }, (_, i) => ({
+        id: `bounce_${i + 1}`,
+        name: `Bounced User ${i + 1}`,
+        email: `bounced.${i + 1}@example.com`,
+        status: 'Bounced',
+        subscribedAt: '2023-03-10',
+    })),
 };
 
 type Contact = {
@@ -94,7 +110,6 @@ export default function ContactListPage() {
     const { toast } = useToast();
     
     const list = contactLists.find(l => l.id === listId);
-    // Use state to make contacts mutable
     const [contacts, setContacts] = React.useState<Contact[]>(contactsByList[listId] || []);
     
     const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
@@ -152,6 +167,10 @@ export default function ContactListPage() {
         )
     }
 
+    const cardDescription = list.isSystemList 
+        ? "This is a system-managed list. Contacts cannot be edited or removed."
+        : `A list of all contacts in ${list.name}.`;
+
     return (
         <>
             <div className="space-y-6">
@@ -168,51 +187,59 @@ export default function ContactListPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Subscribers</CardTitle>
-                        <CardDescription>A list of all contacts in {list.name}.</CardDescription>
+                        <CardDescription>{cardDescription}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-[50px]">
-                                        <Checkbox aria-label="Select all" />
-                                    </TableHead>
+                                    {!list.isSystemList && (
+                                        <TableHead className="w-[50px]">
+                                            <Checkbox aria-label="Select all" />
+                                        </TableHead>
+                                    )}
                                     <TableHead>Name</TableHead>
                                     <TableHead>Email</TableHead>
                                     <TableHead>Status</TableHead>
-                                    <TableHead>Subscribed Date</TableHead>
-                                    <TableHead>
-                                        <span className="sr-only">Actions</span>
-                                    </TableHead>
+                                    <TableHead>Date</TableHead>
+                                    {!list.isSystemList && (
+                                        <TableHead>
+                                            <span className="sr-only">Actions</span>
+                                        </TableHead>
+                                    )}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {contacts.map((contact) => (
                                     <TableRow key={contact.id}>
-                                        <TableCell>
-                                            <Checkbox aria-label={`Select ${contact.name}`} />
-                                        </TableCell>
+                                        {!list.isSystemList && (
+                                            <TableCell>
+                                                <Checkbox aria-label={`Select ${contact.name}`} />
+                                            </TableCell>
+                                        )}
                                         <TableCell className="font-medium">{contact.name}</TableCell>
                                         <TableCell>{contact.email}</TableCell>
                                         <TableCell>
-                                            <Badge variant="secondary">{contact.status}</Badge>
+                                            <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
                                         </TableCell>
                                         <TableCell>{contact.subscribedAt}</TableCell>
-                                        <TableCell>
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button aria-haspopup="true" size="icon" variant="ghost">
-                                                        <MoreVertical className="h-4 w-4" />
-                                                        <span className="sr-only">Toggle menu</span>
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end">
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem onClick={() => handleEditClick(contact)}>Edit Contact</DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-destructive">Remove from List</DropdownMenuItem>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
+                                        {!list.isSystemList && (
+                                            <TableCell>
+                                                <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild>
+                                                        <Button aria-haspopup="true" size="icon" variant="ghost">
+                                                            <MoreVertical className="h-4 w-4" />
+                                                            <span className="sr-only">Toggle menu</span>
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                        <DropdownMenuItem onClick={() => handleEditClick(contact)}>Edit Contact</DropdownMenuItem>
+                                                        <DropdownMenuItem className="text-destructive">Remove from List</DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                </DropdownMenu>
+                                            </TableCell>
+                                        )}
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -220,49 +247,51 @@ export default function ContactListPage() {
                     </CardContent>
                 </Card>
             </div>
-            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                        <DialogTitle>Edit contact</DialogTitle>
-                        <DialogDescription>
-                        Update the details for {selectedContact?.name}. Click save when you're done.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <Form {...form}>
-                        <form onSubmit={form.handleSubmit(handleEditSubmit)} className="space-y-4 py-4">
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Name</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Contact's name" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="email"
-                                render={({ field }) => (
-                                    <FormItem>
-                                        <FormLabel>Email</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="contact@email.com" {...field} />
-                                        </FormControl>
-                                        <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
-                            <DialogFooter>
-                                <Button type="submit">Save changes</Button>
-                            </DialogFooter>
-                        </form>
-                    </Form>
-                </DialogContent>
-            </Dialog>
+            {!list.isSystemList && (
+                <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+                    <DialogContent className="sm:max-w-[425px]">
+                        <DialogHeader>
+                            <DialogTitle>Edit contact</DialogTitle>
+                            <DialogDescription>
+                            Update the details for {selectedContact?.name}. Click save when you're done.
+                            </DialogDescription>
+                        </DialogHeader>
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(handleEditSubmit)} className="space-y-4 py-4">
+                                <FormField
+                                    control={form.control}
+                                    name="name"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Name</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="Contact's name" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="email"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Email</FormLabel>
+                                            <FormControl>
+                                                <Input placeholder="contact@email.com" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <DialogFooter>
+                                    <Button type="submit">Save changes</Button>
+                                </DialogFooter>
+                            </form>
+                        </Form>
+                    </DialogContent>
+                </Dialog>
+            )}
         </>
     );
 }

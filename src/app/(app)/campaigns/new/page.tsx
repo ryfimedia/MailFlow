@@ -35,12 +35,16 @@ import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 
 // Mock data, in a real app this would come from an API
-const contactLists = [
+const allContactLists = [
   { id: '1', name: 'Newsletter Subscribers (1,250)', value: 'list_1' },
   { id: '2', name: 'Q2 Webinar Attendees (320)', value: 'list_2' },
   { id: '3', name: 'High-Value Customers (85)', value: 'list_3' },
   { id: '4', name: 'New Signups (Last 30 Days) (450)', value: 'list_4' },
+  { id: 'unsubscribes', name: 'Unsubscribes', value: 'list_unsub', isSystemList: true },
+  { id: 'bounces', name: 'Bounced Emails', value: 'list_bounces', isSystemList: true },
 ];
+
+const mailingLists = allContactLists.filter(list => !list.isSystemList);
 
 const campaignFormSchema = z.object({
   recipientListId: z.string({ required_error: "Please select a recipient list." }),
@@ -184,7 +188,7 @@ export default function NewCampaignPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {contactLists.map((list) => (
+                          {mailingLists.map((list) => (
                             <SelectItem key={list.id} value={list.value}>
                               {list.name}
                             </SelectItem>
