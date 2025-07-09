@@ -1,9 +1,12 @@
+'use client';
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,6 +17,7 @@ import {
 
 const campaigns = [
   {
+    id: "1",
     name: "🚀 Q2 Product Launch",
     status: "Sent",
     sentDate: "2023-06-15",
@@ -21,6 +25,7 @@ const campaigns = [
     clickRate: "5.8%",
   },
   {
+    id: "2",
     name: "☀️ Summer Sale Promo",
     status: "Sent",
     sentDate: "2023-07-01",
@@ -28,6 +33,7 @@ const campaigns = [
     clickRate: "4.1%",
   },
   {
+    id: "3",
     name: "🍂 Fall Newsletter",
     status: "Draft",
     sentDate: "-",
@@ -35,6 +41,7 @@ const campaigns = [
     clickRate: "-",
   },
   {
+    id: "4",
     name: "🎁 Holiday Greetings",
     status: "Scheduled",
     sentDate: "2023-12-20",
@@ -42,6 +49,7 @@ const campaigns = [
     clickRate: "-",
   },
   {
+    id: "5",
     name: " webinars coming up",
     status: "Sent",
     sentDate: "2023-08-10",
@@ -51,6 +59,14 @@ const campaigns = [
 ];
 
 export default function CampaignsPage() {
+  const router = useRouter();
+
+  const handleRowClick = (campaign: typeof campaigns[0]) => {
+    if (campaign.status === "Sent") {
+      router.push(`/campaigns/${campaign.id}`);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -84,7 +100,11 @@ export default function CampaignsPage() {
             </TableHeader>
             <TableBody>
               {campaigns.map((campaign) => (
-                <TableRow key={campaign.name}>
+                <TableRow 
+                  key={campaign.id} 
+                  onClick={() => handleRowClick(campaign)}
+                  className={campaign.status === 'Sent' ? 'cursor-pointer' : ''}
+                >
                   <TableCell className="font-medium">{campaign.name}</TableCell>
                   <TableCell>
                     <Badge variant={
@@ -97,7 +117,7 @@ export default function CampaignsPage() {
                   <TableCell>{campaign.sentDate}</TableCell>
                   <TableCell>{campaign.openRate}</TableCell>
                   <TableCell>{campaign.clickRate}</TableCell>
-                  <TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button aria-haspopup="true" size="icon" variant="ghost">
