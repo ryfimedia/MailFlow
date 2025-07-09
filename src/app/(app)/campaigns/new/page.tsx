@@ -16,7 +16,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon } from "lucide-react";
+import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -48,6 +48,40 @@ const campaignFormSchema = z.object({
 });
 
 type CampaignFormValues = z.infer<typeof campaignFormSchema>;
+
+// Mock data for editor controls
+const googleFonts = [
+    { name: 'Roboto', family: 'sans-serif' },
+    { name: 'Open Sans', family: 'sans-serif' },
+    { name: 'Lato', family: 'sans-serif' },
+    { name: 'Montserrat', family: 'sans-serif' },
+    { name: 'Oswald', family: 'sans-serif' },
+    { name: 'Raleway', family: 'sans-serif' },
+    { name: 'Poppins', family: 'sans-serif' },
+    { name: 'Nunito Sans', family: 'sans-serif' },
+    { name: 'Merriweather', family: 'serif' },
+    { name: 'Playfair Display', family: 'serif' },
+    { name: 'Lora', family: 'serif' },
+    { name: 'PT Serif', family: 'serif' },
+    { name: 'Crimson Text', family: 'serif' },
+    { name: 'EB Garamond', family: 'serif' },
+    { name: 'Domine', family: 'serif' },
+    { name: 'Bitter', family: 'serif' },
+    { name: 'Arvo', family: 'serif' },
+    { name: 'Noticia Text', family: 'serif' },
+    { name: 'Inter', family: 'sans-serif' },
+    { name: 'Space Grotesk', family: 'sans-serif' },
+];
+
+const fontSizes = ['12px', '14px', '16px', '18px', '20px', '24px', '30px', '36px'];
+
+const colors = [
+  '#000000', '#444444', '#666666', '#999999', '#CCCCCC', '#FFFFFF', 
+  '#FF0000', '#FF9900', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', 
+  '#9900FF', '#FF00FF', '#F44E3B', '#D9E3F0', '#68BC00', '#009CE0', 
+  '#E53935', '#C2185B'
+];
+
 
 export default function NewCampaignPage() {
   const [isGenerating, setIsGenerating] = React.useState(false);
@@ -162,11 +196,60 @@ export default function NewCampaignPage() {
                     <FormItem>
                       <FormLabel>Body</FormLabel>
                         <div className="rounded-md border">
-                          <div className="flex items-center gap-1 border-b p-2 bg-muted">
-                            <Button variant="outline" size="icon" type="button" title="Bold"><Bold className="h-4 w-4" /></Button>
-                            <Button variant="outline" size="icon" type="button" title="Italic"><Italic className="h-4 w-4" /></Button>
-                            <Button variant="outline" size="icon" type="button" title="Underline"><Underline className="h-4 w-4" /></Button>
-                            <Button variant="outline" size="icon" type="button" title="Insert Image"><ImageIcon className="h-4 w-4" /></Button>
+                           <div className="flex flex-wrap items-center gap-2 border-b p-2 bg-muted">
+                            <Select>
+                              <SelectTrigger className="w-auto lg:w-[140px] h-8 text-xs">
+                                <SelectValue placeholder="Font" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {googleFonts.map((font) => (
+                                  <SelectItem key={font.name} value={font.name} style={{ fontFamily: `${font.name}, ${font.family}` }}>
+                                    {font.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            <Select>
+                              <SelectTrigger className="w-[70px] h-8 text-xs">
+                                <SelectValue placeholder="Size" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {fontSizes.map((size) => (
+                                  <SelectItem key={size} value={size}>{size}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+
+                            <div className="h-6 border-l border-border mx-1"></div>
+                            
+                            <div className="flex items-center gap-1">
+                                <Button variant="outline" size="icon" type="button" title="Bold" className="h-8 w-8"><Bold className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Italic" className="h-8 w-8"><Italic className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Underline" className="h-8 w-8"><Underline className="h-4 w-4" /></Button>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Text Color" className="h-8 w-8"><Palette className="h-4 w-4" /></Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-1">
+                                        <div className="grid grid-cols-5 gap-1">
+                                            {colors.map(color => <Button key={color} style={{backgroundColor: color}} className="h-6 w-6 rounded-sm p-0 border hover:opacity-80"></Button>)}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
+
+                            <div className="h-6 border-l border-border mx-1"></div>
+                            
+                            <div className="flex items-center gap-1">
+                                <Button variant="outline" size="icon" type="button" title="Align Left" className="h-8 w-8"><AlignLeft className="h-4 w-4" /></Button>
+                                <Button variant="outline"size="icon" type="button" title="Align Center" className="h-8 w-8"><AlignCenter className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Align Right" className="h-8 w-8"><AlignRight className="h-4 w-4" /></Button>
+                            </div>
+
+                            <div className="h-6 border-l border-border mx-1"></div>
+
+                            <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8"><ImageIcon className="h-4 w-4" /></Button>
                           </div>
                           <FormControl>
                             <Textarea
