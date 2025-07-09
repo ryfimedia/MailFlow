@@ -349,7 +349,8 @@ export default function NewCampaignPage() {
             description: "Your image is being resized and compressed for email.",
           });
           const optimizedDataUrl = await optimizeImageForEmail(file);
-          applyFormat('insertImage', optimizedDataUrl);
+          const imageHtml = `<p style="text-align: left;"><img src="${optimizedDataUrl}" style="max-width: 100%; height: auto; display: inline-block;" /></p><p><br></p>`;
+          applyFormat('insertHTML', imageHtml);
         } catch (error) {
           console.error("Image optimization failed:", error);
           toast({
@@ -431,9 +432,8 @@ export default function NewCampaignPage() {
   const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
 
+    // Let browser handle image selection and resizing.
     if (target.tagName === 'IMG') {
-        setSelectedElement(target);
-        // Browser default resize handles should appear on click
         return;
     }
     
@@ -448,6 +448,7 @@ export default function NewCampaignPage() {
       setIsButtonPopoverOpen(true);
       return;
     }
+
     const styledBlock = target.closest<HTMLElement>('[data-styled-block="true"]');
     if (styledBlock) {
       setSelectedElement(styledBlock);

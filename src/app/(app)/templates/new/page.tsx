@@ -279,7 +279,8 @@ export default function NewTemplatePage() {
             description: "Your image is being resized and compressed for email.",
           });
           const optimizedDataUrl = await optimizeImageForEmail(file);
-          applyFormat('insertImage', optimizedDataUrl);
+          const imageHtml = `<p style="text-align: left;"><img src="${optimizedDataUrl}" style="max-width: 100%; height: auto; display: inline-block;" /></p><p><br></p>`;
+          applyFormat('insertHTML', imageHtml);
         } catch (error) {
           console.error("Image optimization failed:", error);
           toast({
@@ -374,6 +375,11 @@ export default function NewTemplatePage() {
   const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
 
+    // Let browser handle image selection and resizing.
+    if (target.tagName === 'IMG') {
+        return;
+    }
+
     const button = target.closest<HTMLAnchorElement>('a[style*="display: inline-block"]');
     if (button) {
       e.preventDefault();
@@ -390,6 +396,8 @@ export default function NewTemplatePage() {
     if (styledBlock) {
         e.preventDefault();
         setSelectedElement(styledBlock);
+    } else {
+        setSelectedElement(null);
     }
   };
 
