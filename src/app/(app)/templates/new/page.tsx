@@ -125,6 +125,7 @@ export default function NewTemplatePage() {
   const [selectedElement, setSelectedElement] = React.useState<HTMLElement | null>(null);
 
   const [isPageStylePopoverOpen, setIsPageStylePopoverOpen] = React.useState(false);
+  const [isSelectionCollapsed, setIsSelectionCollapsed] = React.useState(true);
 
   const form = useForm<TemplateFormValues>({
     resolver: zodResolver(templateFormSchema),
@@ -158,6 +159,20 @@ export default function NewTemplatePage() {
       }
     }
   }, [emailBodyValue]);
+  
+  React.useEffect(() => {
+    const handleSelectionChange = () => {
+        const selection = window.getSelection();
+        if (selection) {
+            setIsSelectionCollapsed(selection.isCollapsed);
+        }
+    };
+    document.addEventListener('selectionchange', handleSelectionChange);
+    handleSelectionChange(); // Initial check
+    return () => {
+        document.removeEventListener('selectionchange', handleSelectionChange);
+    };
+  }, []);
 
   const updateFormBody = React.useCallback(() => {
     if (editorRef.current) {
@@ -174,6 +189,31 @@ export default function NewTemplatePage() {
       document.execCommand(command, false, value);
       updateFormBody();
     }
+  };
+  
+  const handleClearFormatting = () => {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
+    
+    document.execCommand('removeFormat');
+    
+    const range = selection.getRangeAt(0);
+    let container = range.commonAncestorContainer;
+    
+    if (container.nodeType === Node.TEXT_NODE) {
+        container = container.parentElement!;
+    }
+    
+    const styledBlock = (container as HTMLElement).closest<HTMLElement>('[data-styled-block="true"]');
+    if (styledBlock) {
+        const parent = styledBlock.parentNode!;
+        while (styledBlock.firstChild) {
+            parent.insertBefore(styledBlock.firstChild, styledBlock);
+        }
+        parent.removeChild(styledBlock);
+    }
+    
+    updateFormBody();
   };
 
   const handleFontSize = (size: string) => {
@@ -294,6 +334,12 @@ export default function NewTemplatePage() {
       setButtonTextColor(button.style.color ? rgbToHex(button.style.color) : '#FFFFFF');
       setIsButtonPopoverOpen(true);
       return;
+    }
+
+    const styledBlock = target.closest<HTMLElement>('[data-styled-block="true"]');
+    if (styledBlock) {
+        e.preventDefault();
+        setSelectedElement(styledBlock);
     }
   };
 
@@ -446,7 +492,7 @@ export default function NewTemplatePage() {
                             
                             <div className="flex items-center gap-1">
                                 <Button variant="outline" size="icon" type="button" title="Undo" className="h-8 w-8" onClick={() => applyFormat('undo')}><Undo className="h-4 w-4" /></Button>
-                                <Button variant="outline" size="icon" type="button" title="Clear Formatting" className="h-8 w-8" onClick={() => applyFormat('removeFormat')}><RemoveFormatting className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Clear Formatting" className="h-8 w-8" onClick={handleClearFormatting} disabled={isSelectionCollapsed}><RemoveFormatting className="h-4 w-4" /></Button>
                             </div>
 
                             <div className="h-6 border-l border-border mx-1"></div>
