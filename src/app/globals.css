@@ -92,4 +92,10 @@
   .email-editor div {
     line-height: 1.6;
   }
+  .email-editor img {
+    cursor: pointer;
+  }
+  .email-editor img:hover {
+    outline: 2px solid hsl(var(--primary));
+  }
 }

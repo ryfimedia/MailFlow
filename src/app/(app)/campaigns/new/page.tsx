@@ -47,24 +47,60 @@ import type { ContactList, Settings } from "@/lib/types";
 
 
 const campaignFormSchema = z.object({
-  name: z.string().min(3, { message: "Campaign name must be at least 3 characters." }).or(z.literal("")),
-  recipientListId: z.string({ required_error: "Please select a recipient list." }).or(z.literal("")),
-  subject: z.string().min(5, { message: "Subject must be at least 5 characters." }).or(z.literal("")),
-  emailBody: z.string().min(1, { message: "Email body cannot be empty." }).refine(
-    (html) => {
-        // This validation should only trigger if the user is trying to send/schedule, not just saving a draft
-        // The check for other fields being empty is a proxy for "is this a real submission attempt?"
-        if (form.getValues('name') === '' && form.getValues('recipientListId') === '' && form.getValues('subject') === '') {
-            return true;
-        }
-        const textContent = (html || '').replace(/<[^>]*>/g, '').trim();
-        return textContent.length >= 20;
-    },
-    { message: "Email body must contain at least 20 characters of text." }
-  ).or(z.literal("")),
+  name: z.string(),
+  recipientListId: z.string(),
+  subject: z.string(),
+  emailBody: z.string(),
   scheduledAt: z.date().optional(),
   emailBackgroundColor: z.string().optional(),
+}).superRefine((data, ctx) => {
+    // This refine logic only runs when validation is triggered (on send/schedule).
+    // It doesn't run when saving a draft, as we don't trigger validation then.
+    if (data.name.length < 3) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.too_small,
+            minimum: 3,
+            type: "string",
+            inclusive: true,
+            path: ['name'],
+            message: "Campaign name must be at least 3 characters.",
+        });
+    }
+    if (!data.recipientListId) {
+         ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['recipientListId'],
+            message: "Please select a recipient list.",
+        });
+    }
+    if (data.subject.length < 5) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.too_small,
+            minimum: 5,
+            type: "string",
+            inclusive: true,
+            path: ['subject'],
+            message: "Subject must be at least 5 characters.",
+        });
+    }
+    if (!data.emailBody) {
+         ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ['emailBody'],
+            message: "Email body cannot be empty.",
+        });
+    } else {
+        const textContent = (data.emailBody || '').replace(/<[^>]*>/g, '').trim();
+        if (textContent.length < 20) {
+            ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ['emailBody'],
+                message: "Email body must contain at least 20 characters of text."
+            });
+        }
+    }
 });
+
 
 type CampaignFormValues = z.infer<typeof campaignFormSchema>;
 
@@ -332,6 +368,13 @@ export default function NewCampaignPage() {
 
   const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
+
+    if (target.tagName === 'IMG') {
+        setSelectedElement(target);
+        // Browser default resize handles should appear on click
+        return;
+    }
+    
     const button = target.closest<HTMLAnchorElement>('a[style*="display: inline-block"]');
     if (button) {
       e.preventDefault();
