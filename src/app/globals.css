@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -80,5 +81,11 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  [contenteditable][placeholder]:empty::before {
+    content: attr(placeholder);
+    @apply text-muted-foreground;
+    pointer-events: none;
+    display: block; /* For Firefox */
   }
 }

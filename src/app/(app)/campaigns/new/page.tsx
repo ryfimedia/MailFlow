@@ -15,7 +15,6 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
@@ -50,7 +49,13 @@ const mailingLists = allContactLists.filter(list => !list.isSystemList);
 const campaignFormSchema = z.object({
   recipientListId: z.string({ required_error: "Please select a recipient list." }),
   subject: z.string().min(5, { message: "Subject must be at least 5 characters." }),
-  emailBody: z.string().min(20, { message: "Email body must be at least 20 characters." }),
+  emailBody: z.string().min(1, { message: "Email body cannot be empty." }).refine(
+    (html) => {
+        const textContent = html.replace(/<[^>]*>/g, '').trim();
+        return textContent.length >= 20;
+    },
+    { message: "Email body must contain at least 20 characters of text." }
+  ),
   scheduledAt: z.date().optional(),
 });
 
@@ -98,6 +103,7 @@ export default function NewCampaignPage() {
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [date, setDate] = React.useState<Date>();
   const { toast } = useToast();
+  const editorRef = React.useRef<HTMLDivElement>(null);
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -108,12 +114,38 @@ export default function NewCampaignPage() {
     },
   });
 
-  const emailBodyForAI = form.watch("emailBody");
+  const emailBodyForAI = form.watch("emailBody").replace(/<[^>]+>/g, '');
 
   React.useEffect(() => {
     form.setValue("scheduledAt", date);
   }, [date, form]);
 
+  const applyFormat = (command: string, value?: string) => {
+    if (editorRef.current) {
+      editorRef.current.focus();
+      document.execCommand(command, false, value);
+      // Manually trigger form update after command
+      form.setValue("emailBody", editorRef.current.innerHTML, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+  };
+
+  const handleFontSize = (size: string) => {
+    const sizeMap: { [key: string]: string } = {
+        '12px': '2', '14px': '3', '16px': '4', '18px': '5',
+        '20px': '6', '24px': '6', '30px': '7', '36px': '7',
+    };
+    applyFormat('fontSize', sizeMap[size]);
+  };
+
+  const handleImageInsert = () => {
+    const url = window.prompt("Enter image URL:");
+    if (url) {
+      applyFormat("insertImage", url);
+    }
+  };
 
   async function handleGenerateSubject() {
     if (!emailBodyForAI || emailBodyForAI.length < 20) {
@@ -134,11 +166,7 @@ export default function NewCampaignPage() {
   }
 
   function handleEmojiClick(emoji: string) {
-    const currentBody = form.getValues("emailBody");
-    form.setValue("emailBody", `${currentBody || ''}${emoji}`, {
-      shouldValidate: true,
-      shouldDirty: true,
-    });
+    applyFormat('insertText', emoji);
   }
 
   function onSubmit(data: CampaignFormValues) {
@@ -252,7 +280,7 @@ export default function NewCampaignPage() {
                       <FormLabel>Body</FormLabel>
                         <div className="rounded-md border">
                            <div className="flex flex-wrap items-center gap-2 border-b p-2 bg-muted">
-                            <Select>
+                            <Select onValueChange={(font) => applyFormat('fontName', font)}>
                               <SelectTrigger className="w-auto lg:w-[140px] h-8 text-xs">
                                 <SelectValue placeholder="Font" />
                               </SelectTrigger>
@@ -265,7 +293,7 @@ export default function NewCampaignPage() {
                               </SelectContent>
                             </Select>
 
-                            <Select>
+                            <Select onValueChange={handleFontSize}>
                               <SelectTrigger className="w-[70px] h-8 text-xs">
                                 <SelectValue placeholder="Size" />
                               </SelectTrigger>
@@ -279,9 +307,9 @@ export default function NewCampaignPage() {
                             <div className="h-6 border-l border-border mx-1"></div>
                             
                             <div className="flex items-center gap-1">
-                                <Button variant="outline" size="icon" type="button" title="Bold" className="h-8 w-8"><Bold className="h-4 w-4" /></Button>
-                                <Button variant="outline" size="icon" type="button" title="Italic" className="h-8 w-8"><Italic className="h-4 w-4" /></Button>
-                                <Button variant="outline" size="icon" type="button" title="Underline" className="h-8 w-8"><Underline className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Bold" className="h-8 w-8" onClick={() => applyFormat('bold')}><Bold className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Italic" className="h-8 w-8" onClick={() => applyFormat('italic')}><Italic className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Underline" className="h-8 w-8" onClick={() => applyFormat('underline')}><Underline className="h-4 w-4" /></Button>
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="icon" type="button" title="Text Color" className="h-8 w-8"><Palette className="h-4 w-4" /></Button>
@@ -290,12 +318,12 @@ export default function NewCampaignPage() {
                                         <div className="space-y-2">
                                             <p className="text-xs font-medium text-muted-foreground">Swatches</p>
                                             <div className="grid grid-cols-5 gap-1">
-                                                {colors.map(color => <Button key={color} style={{backgroundColor: color}} className="h-6 w-6 rounded-sm p-0 border hover:opacity-80" title={color}></Button>)}
+                                                {colors.map(color => <Button key={color} style={{backgroundColor: color}} className="h-6 w-6 rounded-sm p-0 border hover:opacity-80" title={color} onClick={() => applyFormat('foreColor', color)}></Button>)}
                                             </div>
                                             <Separator />
                                             <div className="flex items-center gap-2 pt-1">
                                                 <Label htmlFor="color-picker" className="text-xs font-medium flex-1">Custom</Label>
-                                                <Input id="color-picker" type="color" className="h-8 w-8 p-0 border-none" defaultValue="#000000" />
+                                                <Input id="color-picker" type="color" className="h-8 w-8 p-0 border-none" defaultValue="#000000" onChange={(e) => applyFormat('foreColor', e.target.value)} />
                                             </div>
                                         </div>
                                     </PopoverContent>
@@ -305,9 +333,9 @@ export default function NewCampaignPage() {
                             <div className="h-6 border-l border-border mx-1"></div>
                             
                             <div className="flex items-center gap-1">
-                                <Button variant="outline" size="icon" type="button" title="Align Left" className="h-8 w-8"><AlignLeft className="h-4 w-4" /></Button>
-                                <Button variant="outline"size="icon" type="button" title="Align Center" className="h-8 w-8"><AlignCenter className="h-4 w-4" /></Button>
-                                <Button variant="outline" size="icon" type="button" title="Align Right" className="h-8 w-8"><AlignRight className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Align Left" className="h-8 w-8" onClick={() => applyFormat('justifyLeft')}><AlignLeft className="h-4 w-4" /></Button>
+                                <Button variant="outline"size="icon" type="button" title="Align Center" className="h-8 w-8" onClick={() => applyFormat('justifyCenter')}><AlignCenter className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Align Right" className="h-8 w-8" onClick={() => applyFormat('justifyRight')}><AlignRight className="h-4 w-4" /></Button>
                             </div>
 
                             <div className="h-6 border-l border-border mx-1"></div>
@@ -334,15 +362,18 @@ export default function NewCampaignPage() {
                                         </div>
                                     </PopoverContent>
                                 </Popover>
-                                <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8"><ImageIcon className="h-4 w-4" /></Button>
+                                <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8" onClick={handleImageInsert}><ImageIcon className="h-4 w-4" /></Button>
                             </div>
                           </div>
                           <FormControl>
-                            <Textarea
-                              placeholder="Write your email here..."
-                              className="min-h-[400px] border-0 rounded-t-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                              {...field}
-                            />
+                            <div
+                                ref={editorRef}
+                                contentEditable={true}
+                                onInput={(e) => field.onChange(e.currentTarget.innerHTML)}
+                                dangerouslySetInnerHTML={{ __html: field.value }}
+                                className="min-h-[400px] w-full rounded-b-md border-0 bg-background p-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                                placeholder="Write your email here..."
+                              />
                           </FormControl>
                         </div>
                       <FormMessage />
