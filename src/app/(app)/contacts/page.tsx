@@ -29,6 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import Papa from 'papaparse';
+import { Separator } from "@/components/ui/separator";
 
 
 // Mock data and types - in a real app, these would be defined in a shared types file
@@ -79,6 +80,14 @@ initialContactLists.find(l => l.id === 'all')!.count = initialContactsByList['al
 const CONTACT_LISTS_KEY = 'contactLists';
 const CONTACTS_BY_LIST_KEY = 'contactsByList';
 
+const APP_CONTACT_FIELDS = [
+  { key: 'email', label: 'Email Address', required: true },
+  { key: 'firstName', label: 'First Name', required: false },
+  { key: 'lastName', label: 'Last Name', required: false },
+  { key: 'phone', label: 'Phone', required: false },
+  { key: 'company', label: 'Company', required: false },
+] as const;
+
 
 const listIcons: { [key: string]: React.ElementType } = {
   unsubscribes: ShieldOff,
@@ -89,7 +98,6 @@ const listIcons: { [key: string]: React.ElementType } = {
 
 export default function ContactsPage() {
   const [lists, setLists] = React.useState<ContactList[]>([]);
-  const [file, setFile] = React.useState<File | null>(null);
   const { toast } = useToast();
 
   const [isCreateListOpen, setCreateListOpen] = React.useState(false);
@@ -100,6 +108,9 @@ export default function ContactsPage() {
   const [renamedListName, setRenamedListName] = React.useState("");
   
   const [isUploadModalOpen, setUploadModalOpen] = React.useState(false);
+  const [file, setFile] = React.useState<File | null>(null);
+  const [csvHeaders, setCsvHeaders] = React.useState<string[]>([]);
+  const [columnMapping, setColumnMapping] = React.useState<Record<string, string>>({});
   const [uploadOption, setUploadOption] = React.useState('new');
   const [uploadNewListName, setUploadNewListName] = React.useState('');
   const [uploadTargetListId, setUploadTargetListId] = React.useState('');
@@ -180,8 +191,44 @@ export default function ContactsPage() {
   };
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      setFile(e.target.files[0]);
+    if (e.target.files && e.target.files.length > 0) {
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
+      setCsvHeaders([]);
+      setColumnMapping({});
+
+      Papa.parse(selectedFile, {
+        preview: 1,
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+          const headers = results.meta.fields || [];
+          setCsvHeaders(headers);
+          
+          const newMapping: Record<string, string> = {};
+          const lowerCaseHeaders = headers.map(h => h.toLowerCase().replace(/[\s_]/g, ''));
+
+          APP_CONTACT_FIELDS.forEach(field => {
+            const fieldVariations = [field.key.toLowerCase()];
+            if (field.key === 'firstName') fieldVariations.push('first');
+            if (field.key === 'lastName') fieldVariations.push('last', 'surname');
+            if (field.key === 'email') fieldVariations.push('emailaddress');
+            
+            const foundIndex = lowerCaseHeaders.findIndex(header => 
+              fieldVariations.some(variation => header.includes(variation))
+            );
+
+            if (foundIndex !== -1) {
+              newMapping[field.key] = headers[foundIndex];
+            }
+          });
+          setColumnMapping(newMapping);
+        },
+      });
+    } else {
+      setFile(null);
+      setCsvHeaders([]);
+      setColumnMapping({});
     }
   };
 
@@ -196,23 +243,16 @@ export default function ContactsPage() {
         toast({ variant: 'destructive', title: 'No List Selected', description: 'Please select an existing list.' });
         return;
     }
+    if (!columnMapping.email) {
+        toast({ variant: 'destructive', title: 'Email Column Required', description: 'Please map the Email Address field to a column from your CSV.' });
+        return;
+    }
 
     Papa.parse(file, {
         header: true,
         skipEmptyLines: true,
         complete: (results) => {
-            const parsedContacts = results.data as Array<{
-                email?: string;
-                firstName?: string;
-                lastName?: string;
-                phone?: string;
-                company?: string;
-            }>;
-
-            if (!parsedContacts.length || !results.meta.fields?.includes('email')) {
-                toast({ variant: 'destructive', title: "Invalid CSV", description: "The CSV must contain an 'email' column and at least one row." });
-                return;
-            }
+            const parsedContacts = results.data as Array<Record<string, string>>;
 
             try {
                 const contactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
@@ -252,16 +292,17 @@ export default function ContactsPage() {
                 const allEmails = new Set(allContactsList.map(c => c.email));
 
                 parsedContacts.forEach(row => {
-                    if (row.email && typeof row.email === 'string') {
-                        const sanitizedEmail = row.email.trim().toLowerCase();
+                    const emailValue = row[columnMapping.email];
+                    if (emailValue) {
+                        const sanitizedEmail = emailValue.trim().toLowerCase();
                         if (sanitizedEmail && !existingEmails.has(sanitizedEmail)) {
                             const newContact: Contact = {
                                 id: crypto.randomUUID(),
                                 email: sanitizedEmail,
-                                firstName: row.firstName || '',
-                                lastName: row.lastName || '',
-                                phone: row.phone || '',
-                                company: row.company || '',
+                                firstName: columnMapping.firstName ? row[columnMapping.firstName] || '' : '',
+                                lastName: columnMapping.lastName ? row[columnMapping.lastName] || '' : '',
+                                phone: columnMapping.phone ? row[columnMapping.phone] || '' : '',
+                                company: columnMapping.company ? row[columnMapping.company] || '' : '',
                                 status: 'Subscribed',
                                 subscribedAt: new Date().toISOString(),
                             };
@@ -305,6 +346,8 @@ export default function ContactsPage() {
                 setUploadModalOpen(false);
                 setUploadNewListName('');
                 setUploadTargetListId('');
+                setCsvHeaders([]);
+                setColumnMapping({});
 
             } catch (error) {
                 console.error("Error processing CSV:", error);
@@ -399,7 +442,7 @@ export default function ContactsPage() {
                                                         <AlertDialogHeader>
                                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                                             <AlertDialogDescription>
-                                                                This action cannot be undone. This will permanently delete the "{list.name}" list and all its contacts.
+                                                                This action cannot be undone. This will permanently delete the "{list.name}" list. Contacts in this list will not be deleted from the system, only from this list.
                                                             </AlertDialogDescription>
                                                         </AlertDialogHeader>
                                                         <AlertDialogFooter>
@@ -445,46 +488,82 @@ export default function ContactsPage() {
                       <DialogTrigger asChild>
                          <Button className="w-full" disabled={!file}>Upload CSV</Button>
                       </DialogTrigger>
-                      <DialogContent>
+                      <DialogContent className="sm:max-w-lg">
                           <DialogHeader>
                               <DialogTitle>Import Contacts</DialogTitle>
-                              <DialogDescription>Choose where to add the new contacts from your CSV file.</DialogDescription>
+                              <DialogDescription>Choose where to add the new contacts and map your CSV columns.</DialogDescription>
                           </DialogHeader>
-                          <RadioGroup defaultValue="new" value={uploadOption} onValueChange={setUploadOption} className="py-4 space-y-2">
-                              <div>
-                                  <div className="flex items-center space-x-2">
-                                      <RadioGroupItem value="new" id="r1" />
-                                      <Label htmlFor="r1">Create a new list</Label>
-                                  </div>
-                                  {uploadOption === 'new' && (
-                                      <Input 
-                                          placeholder="New list name" 
-                                          className="mt-2 ml-6 w-[calc(100%-1.5rem)]"
-                                          value={uploadNewListName}
-                                          onChange={(e) => setUploadNewListName(e.target.value)}
-                                       />
-                                  )}
+                          
+                          <div className="space-y-2 pt-4">
+                            <Label>Destination List</Label>
+                            <RadioGroup defaultValue="new" value={uploadOption} onValueChange={setUploadOption} className="space-y-2">
+                                <div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="new" id="r1" />
+                                        <Label htmlFor="r1">Create a new list</Label>
+                                    </div>
+                                    {uploadOption === 'new' && (
+                                        <Input 
+                                            placeholder="New list name" 
+                                            className="mt-2 ml-6 w-[calc(100%-1.5rem)]"
+                                            value={uploadNewListName}
+                                            onChange={(e) => setUploadNewListName(e.target.value)}
+                                        />
+                                    )}
+                                </div>
+                                <div>
+                                    <div className="flex items-center space-x-2">
+                                        <RadioGroupItem value="existing" id="r2" />
+                                        <Label htmlFor="r2">Add to an existing list</Label>
+                                    </div>
+                                    {uploadOption === 'existing' && (
+                                        <Select onValueChange={setUploadTargetListId}>
+                                            <SelectTrigger className="mt-2 ml-6 w-[calc(100%-1.5rem)]">
+                                                <SelectValue placeholder="Select a list..." />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {lists.filter(l => !l.isSystemList).map(l => (
+                                                    <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    )}
+                                </div>
+                            </RadioGroup>
+                          </div>
+
+                          {csvHeaders.length > 0 && (
+                            <>
+                              <Separator className="my-4" />
+                              <div className="space-y-4">
+                                  <h3 className="text-sm font-medium">Map Columns</h3>
+                                  <p className="text-sm text-muted-foreground">Match columns from your file to the contact fields.</p>
+                                  {APP_CONTACT_FIELDS.map(field => (
+                                      <div key={field.key} className="grid grid-cols-3 items-center gap-4">
+                                          <Label htmlFor={`map-${field.key}`} className="text-right">
+                                              {field.label} {field.required && <span className="text-destructive">*</span>}
+                                          </Label>
+                                          <Select
+                                              value={columnMapping[field.key] || 'none'}
+                                              onValueChange={(value) => setColumnMapping(prev => ({...prev, [field.key]: value === 'none' ? '' : value}))}
+                                          >
+                                              <SelectTrigger id={`map-${field.key}`} className="col-span-2">
+                                                  <SelectValue placeholder="Select a column..." />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="none">-- Do not import --</SelectItem>
+                                                  {csvHeaders.map(header => (
+                                                      <SelectItem key={header} value={header}>{header}</SelectItem>
+                                                  ))}
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
+                                  ))}
                               </div>
-                              <div>
-                                  <div className="flex items-center space-x-2">
-                                      <RadioGroupItem value="existing" id="r2" />
-                                      <Label htmlFor="r2">Add to an existing list</Label>
-                                  </div>
-                                  {uploadOption === 'existing' && (
-                                      <Select onValueChange={setUploadTargetListId}>
-                                          <SelectTrigger className="mt-2 ml-6 w-[calc(100%-1.5rem)]">
-                                              <SelectValue placeholder="Select a list..." />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                              {lists.filter(l => !l.isSystemList).map(l => (
-                                                  <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                                              ))}
-                                          </SelectContent>
-                                      </Select>
-                                  )}
-                              </div>
-                          </RadioGroup>
-                          <DialogFooter>
+                            </>
+                          )}
+
+                          <DialogFooter className="pt-4">
                               <Button variant="outline" onClick={() => setUploadModalOpen(false)}>Cancel</Button>
                               <Button onClick={handleUpload}>Import Contacts</Button>
                           </DialogFooter>
