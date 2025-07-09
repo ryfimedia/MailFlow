@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus } from "lucide-react";
+import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -33,6 +33,15 @@ import {
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 // Mock data, in a real app this would come from an API
 const allContactLists = [
@@ -105,6 +114,8 @@ export default function NewCampaignPage() {
   const { toast } = useToast();
   const editorRef = React.useRef<HTMLDivElement>(null);
   const [dividerColor, setDividerColor] = React.useState('#cccccc');
+  const [isSaveTemplateOpen, setIsSaveTemplateOpen] = React.useState(false);
+  const [templateName, setTemplateName] = React.useState("");
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -198,6 +209,36 @@ export default function NewCampaignPage() {
     applyFormat('insertText', emoji);
   }
 
+  const handleSaveTemplate = () => {
+    const emailBody = form.getValues("emailBody");
+    if (!templateName.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Template name required",
+        description: "Please enter a name for your template.",
+      });
+      return;
+    }
+    if (!emailBody.replace(/<[^>]*>/g, '').trim()) {
+      toast({
+        variant: "destructive",
+        title: "Empty content",
+        description: "Cannot save an empty email body as a template.",
+      });
+      return;
+    }
+
+    console.log("Saving template:", { name: templateName, content: emailBody });
+    
+    toast({
+      title: "Template Saved!",
+      description: `Your template "${templateName}" has been saved.`,
+    });
+
+    setTemplateName("");
+    setIsSaveTemplateOpen(false);
+  };
+
   function onSubmit(data: CampaignFormValues) {
     console.log(data);
     const action = data.scheduledAt ? "scheduled" : "sent";
@@ -277,8 +318,43 @@ export default function NewCampaignPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Email Content</CardTitle>
-                <CardDescription>Compose your message for your audience.</CardDescription>
+                  <div className="flex items-center justify-between">
+                      <div className="space-y-1.5">
+                        <CardTitle>Email Content</CardTitle>
+                        <CardDescription>Compose your message for your audience.</CardDescription>
+                      </div>
+                      <Dialog open={isSaveTemplateOpen} onOpenChange={setIsSaveTemplateOpen}>
+                          <DialogTrigger asChild>
+                              <Button variant="outline" size="sm">
+                                  <Save className="mr-2 h-4 w-4" />
+                                  Save as Template
+                              </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[425px]">
+                              <DialogHeader>
+                                  <DialogTitle>Save Email as Template</DialogTitle>
+                                  <DialogDescription>
+                                  This will save the current email body as a reusable template. The subject line and recipient list will not be saved.
+                                  </DialogDescription>
+                              </DialogHeader>
+                              <div className="space-y-2 py-4">
+                                  <Label htmlFor="template-name" className="text-right">
+                                      Template Name
+                                  </Label>
+                                  <Input
+                                      id="template-name"
+                                      value={templateName}
+                                      onChange={(e) => setTemplateName(e.target.value)}
+                                      placeholder="e.g., Monthly Newsletter"
+                                  />
+                              </div>
+                              <DialogFooter>
+                                  <Button variant="outline" onClick={() => setIsSaveTemplateOpen(false)}>Cancel</Button>
+                                  <Button onClick={handleSaveTemplate}>Save Template</Button>
+                              </DialogFooter>
+                          </DialogContent>
+                      </Dialog>
+                  </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField

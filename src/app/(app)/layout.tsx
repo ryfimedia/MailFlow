@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -22,6 +23,7 @@ import {
   Settings,
   Rocket,
   PlusCircle,
+  LayoutTemplate,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -35,6 +37,7 @@ export default function AppLayout({
   const menuItems = [
     { href: "/", label: "Dashboard", icon: LayoutDashboard },
     { href: "/campaigns", label: "Campaigns", icon: Mail },
+    { href: "/templates", label: "Templates", icon: LayoutTemplate },
     { href: "/contacts", label: "Contacts", icon: Users },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
