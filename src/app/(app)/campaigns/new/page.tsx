@@ -107,10 +107,29 @@ const emojis = [
     '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯',
 ];
 
+function rgbToHex(rgb: string): string {
+  if (rgb.startsWith('#')) return rgb;
+  if (!rgb.startsWith('rgb')) return '#000000'; // Default for color names etc.
+
+  const sep = rgb.indexOf(",") > -1 ? "," : " ";
+  const rgbParts = rgb.substr(4).split(")")[0].split(sep);
+
+  let r = (+rgbParts[0]).toString(16),
+      g = (+rgbParts[1]).toString(16),
+      b = (+rgbParts[2]).toString(16);
+
+  if (r.length === 1) r = "0" + r;
+  if (g.length === 1) g = "0" + g;
+  if (b.length === 1) b = "0" + b;
+
+  return "#" + r + g + b;
+}
+
 export default function NewCampaignPage() {
   const [date, setDate] = React.useState<Date>();
   const { toast } = useToast();
   const editorRef = React.useRef<HTMLDivElement>(null);
+  
   const [dividerColor, setDividerColor] = React.useState('#cccccc');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = React.useState(false);
   const [templateName, setTemplateName] = React.useState("");
@@ -123,8 +142,12 @@ export default function NewCampaignPage() {
 
   const [isBlockStylePopoverOpen, setIsBlockStylePopoverOpen] = React.useState(false);
   const [blockBgColor, setBlockBgColor] = React.useState('#f9f9f9');
-  const [blockPadding, setBlockPadding] = React.useState('20');
-  const [blockBorder, setBlockBorder] = React.useState('1px solid #cccccc');
+  const [blockPadding, setBlockPadding] = React.useState(20);
+  const [blockBorderWidth, setBlockBorderWidth] = React.useState(1);
+  const [blockBorderStyle, setBlockBorderStyle] = React.useState('solid');
+  const [blockBorderColor, setBlockBorderColor] = React.useState('#cccccc');
+  
+  const [selectedElement, setSelectedElement] = React.useState<HTMLElement | null>(null);
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -161,15 +184,20 @@ export default function NewCampaignPage() {
     }
   }, [emailBodyValue]);
 
+  const updateFormBody = () => {
+    if (editorRef.current) {
+        form.setValue("emailBody", editorRef.current.innerHTML, {
+            shouldValidate: true,
+            shouldDirty: true,
+        });
+    }
+  };
 
   const applyFormat = (command: string, value?: string) => {
     if (editorRef.current) {
       editorRef.current.focus();
       document.execCommand(command, false, value);
-      form.setValue("emailBody", editorRef.current.innerHTML, {
-        shouldValidate: true,
-        shouldDirty: true,
-      });
+      updateFormBody();
     }
   };
 
@@ -205,40 +233,100 @@ export default function NewCampaignPage() {
     applyFormat("insertHTML", dividerHtml);
   };
   
-  const handleInsertButton = () => {
+  const handleSaveButton = () => {
     if (buttonText && buttonUrl) {
-      const buttonHtml = `<p style="text-align: center; margin: 20px 0;"><a href="${buttonUrl}" target="_blank" style="background-color: ${buttonBgColor}; color: ${buttonTextColor}; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">${buttonText}</a></p><p><br></p>`;
-      applyFormat("insertHTML", buttonHtml);
+      if (selectedElement && selectedElement.tagName === 'A') {
+        const button = selectedElement as HTMLAnchorElement;
+        button.href = buttonUrl;
+        button.textContent = buttonText;
+        button.style.backgroundColor = buttonBgColor;
+        button.style.color = buttonTextColor;
+      } else {
+        const buttonHtml = `<p style="text-align: center; margin: 20px 0;"><a href="${buttonUrl}" target="_blank" style="background-color: ${buttonBgColor}; color: ${buttonTextColor}; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">${buttonText}</a></p><p><br></p>`;
+        applyFormat("insertHTML", buttonHtml);
+      }
     }
+    updateFormBody();
     setIsButtonPopoverOpen(false);
   };
 
-  const handleStyleBlock = () => {
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-        toast({ variant: "destructive", title: "Selection required", description: "Please select text to apply block styles."});
-        return;
-    };
-    
-    const range = selection.getRangeAt(0);
-    const selectedContent = range.extractContents();
-    
-    const wrapper = document.createElement('div');
-    wrapper.style.backgroundColor = blockBgColor;
-    wrapper.style.padding = `${blockPadding}px`;
-    wrapper.style.border = blockBorder;
-    wrapper.style.borderRadius = '8px';
-    wrapper.style.margin = '16px 0';
-    wrapper.appendChild(selectedContent);
+  const handleSaveBlockStyles = () => {
+    const border = `${blockBorderWidth}px ${blockBorderStyle} ${blockBorderColor}`;
 
-    range.insertNode(wrapper);
-    selection.removeAllRanges();
-    form.setValue("emailBody", editorRef.current!.innerHTML, {
-      shouldValidate: true,
-      shouldDirty: true,
-    });
+    if (selectedElement && selectedElement.dataset.styledBlock) {
+      const block = selectedElement;
+      block.style.backgroundColor = blockBgColor;
+      block.style.padding = `${blockPadding}px`;
+      block.style.border = border;
+    } else {
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+          toast({ variant: "destructive", title: "Selection required", description: "Please select text to apply block styles."});
+          return;
+      };
+      
+      const range = selection.getRangeAt(0);
+      const selectedContent = range.extractContents();
+      
+      const wrapper = document.createElement('div');
+      wrapper.dataset.styledBlock = "true";
+      wrapper.style.backgroundColor = blockBgColor;
+      wrapper.style.padding = `${blockPadding}px`;
+      wrapper.style.border = border;
+      wrapper.style.borderRadius = '8px';
+      wrapper.style.margin = '16px 0';
+      wrapper.appendChild(selectedContent);
+
+      range.insertNode(wrapper);
+      selection.removeAllRanges();
+    }
     
+    updateFormBody();
     setIsBlockStylePopoverOpen(false);
+  };
+
+  const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+
+    const button = target.closest<HTMLAnchorElement>('a[style*="display: inline-block"]');
+    if (button) {
+      e.preventDefault();
+      setSelectedElement(button);
+      setButtonText(button.textContent || "Click Here");
+      setButtonUrl(button.href || "https://");
+      setButtonBgColor(button.style.backgroundColor ? rgbToHex(button.style.backgroundColor) : '#F39C12');
+      setButtonTextColor(button.style.color ? rgbToHex(button.style.color) : '#FFFFFF');
+      setIsButtonPopoverOpen(true);
+      return;
+    }
+    
+    const block = target.closest<HTMLDivElement>('[data-styled-block="true"]');
+    if (block) {
+      e.preventDefault();
+      setSelectedElement(block);
+      
+      setBlockBgColor(block.style.backgroundColor ? rgbToHex(block.style.backgroundColor) : '#f9f9f9');
+      setBlockPadding(block.style.padding ? parseInt(block.style.padding, 10) : 20);
+
+      if (block.style.border) {
+        setBlockBorderWidth(parseInt(block.style.borderWidth, 10) || 1);
+        setBlockBorderStyle(block.style.borderStyle || 'solid');
+        setBlockBorderColor(rgbToHex(block.style.borderColor) || '#cccccc');
+      } else {
+        setBlockBorderWidth(1);
+        setBlockBorderStyle('solid');
+        setBlockBorderColor('#cccccc');
+      }
+      setIsBlockStylePopoverOpen(true);
+      return;
+    }
+  };
+
+  const handlePopoverOpenChange = (open: boolean, setter: React.Dispatch<React.SetStateAction<boolean>>) => {
+    setter(open);
+    if (!open) {
+      setSelectedElement(null);
+    }
   };
 
   function handleEmojiClick(emoji: string) {
@@ -520,7 +608,7 @@ export default function NewCampaignPage() {
                                         </div>
                                     </PopoverContent>
                                 </Popover>
-                                 <Popover open={isButtonPopoverOpen} onOpenChange={setIsButtonPopoverOpen}>
+                                 <Popover open={isButtonPopoverOpen} onOpenChange={(open) => handlePopoverOpenChange(open, setIsButtonPopoverOpen)}>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="icon" type="button" title="Insert Button" className="h-8 w-8">
                                             <Component className="h-4 w-4" />
@@ -528,7 +616,7 @@ export default function NewCampaignPage() {
                                     </PopoverTrigger>
                                     <PopoverContent align="start" className="w-auto p-4">
                                         <div className="space-y-4">
-                                            <p className="text-sm font-medium">Button Options</p>
+                                            <p className="text-sm font-medium">{selectedElement ? 'Edit Button' : 'Button Options'}</p>
                                             <div className="space-y-2">
                                                 <Label htmlFor="button-text" className="text-xs">Text</Label>
                                                 <Input id="button-text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} placeholder="Click Here" />
@@ -547,34 +635,55 @@ export default function NewCampaignPage() {
                                                     <Input id="button-text-color" type="color" className="h-8 w-8 p-0 border-none" value={buttonTextColor} onChange={(e) => setButtonTextColor(e.target.value)} />
                                                 </div>
                                             </div>
-                                            <Button size="sm" className="w-full" onClick={handleInsertButton}>Insert Button</Button>
+                                            <Button size="sm" className="w-full" onClick={handleSaveButton}>{selectedElement ? 'Update Button' : 'Insert Button'}</Button>
                                         </div>
                                     </PopoverContent>
                                 </Popover>
-                                <Popover open={isBlockStylePopoverOpen} onOpenChange={setIsBlockStylePopoverOpen}>
+                                <Popover open={isBlockStylePopoverOpen} onOpenChange={(open) => handlePopoverOpenChange(open, setIsBlockStylePopoverOpen)}>
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="icon" type="button" title="Style Block" className="h-8 w-8">
                                             <Box className="h-4 w-4" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent align="start" className="w-auto p-2">
-                                        <div className="space-y-2">
-                                            <p className="text-sm font-medium">Block Styling</p>
-                                            <div className="grid gap-2">
+                                    <PopoverContent align="start" className="w-auto p-4">
+                                        <div className="space-y-4">
+                                            <p className="text-sm font-medium">{selectedElement ? 'Edit Block' : 'Block Styling'}</p>
+                                            <div className="grid gap-4">
                                                 <div className="flex items-center gap-2">
                                                     <Label htmlFor="block-bg-color" className="text-xs flex-1">Background</Label>
                                                     <Input id="block-bg-color" type="color" className="h-8 w-8 p-0 border-none" value={blockBgColor} onChange={(e) => setBlockBgColor(e.target.value)} />
                                                 </div>
                                                 <div>
                                                     <Label htmlFor="block-padding" className="text-xs">Padding (px)</Label>
-                                                    <Input id="block-padding" type="number" value={blockPadding} onChange={(e) => setBlockPadding(e.target.value)} />
+                                                    <Input id="block-padding" type="number" value={blockPadding} onChange={(e) => setBlockPadding(Number(e.target.value))} />
                                                 </div>
-                                                <div>
-                                                    <Label htmlFor="block-border" className="text-xs">Border</Label>
-                                                    <Input id="block-border" value={blockBorder} onChange={(e) => setBlockBorder(e.target.value)} placeholder="e.g. 1px solid #ccc" />
+                                                <Separator />
+                                                <p className="text-xs font-medium text-muted-foreground -mb-2">Border</p>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex-1 space-y-1">
+                                                        <Label htmlFor="block-border-width" className="text-xs">Width (px)</Label>
+                                                        <Input id="block-border-width" type="number" value={blockBorderWidth} onChange={(e) => setBlockBorderWidth(Number(e.target.value))} />
+                                                    </div>
+                                                    <div className="flex-1 space-y-1">
+                                                        <Label htmlFor="block-border-style" className="text-xs">Style</Label>
+                                                        <Select value={blockBorderStyle} onValueChange={(value) => setBlockBorderStyle(value)}>
+                                                            <SelectTrigger id="block-border-style" className="h-10">
+                                                                <SelectValue placeholder="Style" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                <SelectItem value="solid">Solid</SelectItem>
+                                                                <SelectItem value="dashed">Dashed</SelectItem>
+                                                                <SelectItem value="dotted">Dotted</SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+                                                    <div className="flex flex-col items-center gap-1">
+                                                        <Label htmlFor="block-border-color" className="text-xs">Color</Label>
+                                                        <Input id="block-border-color" type="color" className="h-10 w-10 p-0 border-none" value={blockBorderColor} onChange={(e) => setBlockBorderColor(e.target.value)} />
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <Button size="sm" className="w-full" onClick={handleStyleBlock}>Apply Styles</Button>
+                                            <Button size="sm" className="w-full" onClick={handleSaveBlockStyles}>{selectedElement ? 'Update Styles' : 'Apply Styles'}</Button>
                                         </div>
                                     </PopoverContent>
                                 </Popover>
@@ -585,6 +694,7 @@ export default function NewCampaignPage() {
                                 ref={editorRef}
                                 contentEditable={true}
                                 onInput={(e) => field.onChange(e.currentTarget.innerHTML)}
+                                onClick={handleEditorClick}
                                 className="email-editor min-h-[400px] w-full rounded-b-md border-0 bg-background p-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
                               />
