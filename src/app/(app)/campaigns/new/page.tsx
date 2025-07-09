@@ -120,6 +120,8 @@ export default function NewCampaignPage() {
   const [isButtonPopoverOpen, setIsButtonPopoverOpen] = React.useState(false);
   const [buttonText, setButtonText] = React.useState("Click Here");
   const [buttonUrl, setButtonUrl] = React.useState("https://");
+  const [buttonBgColor, setButtonBgColor] = React.useState('#F39C12');
+  const [buttonTextColor, setButtonTextColor] = React.useState('#ffffff');
 
   const [isBlockStylePopoverOpen, setIsBlockStylePopoverOpen] = React.useState(false);
   const [blockBgColor, setBlockBgColor] = React.useState('#f9f9f9');
@@ -208,7 +210,7 @@ export default function NewCampaignPage() {
   
   const handleInsertButton = () => {
     if (buttonText && buttonUrl) {
-      const buttonHtml = `<p style="text-align: center; margin: 20px 0;"><a href="${buttonUrl}" target="_blank" style="background-color: #F39C12; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">${buttonText}</a></p><p><br></p>`;
+      const buttonHtml = `<p style="text-align: center; margin: 20px 0;"><a href="${buttonUrl}" target="_blank" style="background-color: ${buttonBgColor}; color: ${buttonTextColor}; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">${buttonText}</a></p><p><br></p>`;
       applyFormat("insertHTML", buttonHtml);
     }
     setIsButtonPopoverOpen(false);
@@ -551,14 +553,26 @@ export default function NewCampaignPage() {
                                             <Component className="h-4 w-4" />
                                         </Button>
                                     </PopoverTrigger>
-                                    <PopoverContent align="start" className="w-auto p-2">
-                                        <div className="space-y-2">
+                                    <PopoverContent align="start" className="w-auto p-4">
+                                        <div className="space-y-4">
                                             <p className="text-sm font-medium">Button Options</p>
-                                            <div className="grid gap-2">
+                                            <div className="space-y-2">
                                                 <Label htmlFor="button-text" className="text-xs">Text</Label>
                                                 <Input id="button-text" value={buttonText} onChange={(e) => setButtonText(e.target.value)} placeholder="Click Here" />
+                                            </div>
+                                            <div className="space-y-2">
                                                 <Label htmlFor="button-url" className="text-xs">URL</Label>
                                                 <Input id="button-url" value={buttonUrl} onChange={(e) => setButtonUrl(e.target.value)} placeholder="https://" />
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <div className="flex items-center gap-2">
+                                                    <Label htmlFor="button-bg-color" className="text-xs">Background</Label>
+                                                    <Input id="button-bg-color" type="color" className="h-8 w-8 p-0 border-none" value={buttonBgColor} onChange={(e) => setButtonBgColor(e.target.value)} />
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Label htmlFor="button-text-color" className="text-xs">Text</Label>
+                                                    <Input id="button-text-color" type="color" className="h-8 w-8 p-0 border-none" value={buttonTextColor} onChange={(e) => setButtonTextColor(e.target.value)} />
+                                                </div>
                                             </div>
                                             <Button size="sm" className="w-full" onClick={handleInsertButton}>Insert Button</Button>
                                         </div>
