@@ -1,6 +1,8 @@
+
 'use client';
 
 import React from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -36,7 +38,6 @@ export default function ContactsPage() {
     if (!file) return;
     toast({ title: "Upload successful!", description: "Your contacts have been imported." });
     
-    // Reset file input
     const fileInput = document.getElementById('dropzone-file') as HTMLInputElement;
     if (fileInput) {
         fileInput.value = "";
@@ -63,31 +64,32 @@ export default function ContactsPage() {
                 </CardHeader>
                 <CardContent className="grid gap-4 md:grid-cols-2">
                     {contactLists.map(list => (
-                        <Card key={list.id}>
-                            <CardHeader className="flex flex-row items-start justify-between pb-2">
-                                <CardTitle className="text-base font-medium">{list.name}</CardTitle>
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8 -mt-2 -mr-2">
-                                            <MoreVertical className="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                        <DropdownMenuItem>Rename</DropdownMenuItem>
-                                        <DropdownMenuItem>View Contacts</DropdownMenuItem>
-                                        <DropdownMenuItem className="text-destructive">Delete List</DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex items-center gap-2 text-2xl font-bold">
-                                    <Users className="h-6 w-6 text-muted-foreground" />
-                                    {list.count.toLocaleString()}
-                                </div>
-                                <p className="text-xs text-muted-foreground">Created on {list.createdAt}</p>
-                            </CardContent>
-                        </Card>
+                        <Link key={list.id} href={`/contacts/${list.id}`} className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+                            <Card className="h-full transition-all group-hover:shadow-md group-hover:border-primary/50">
+                                <CardHeader className="flex flex-row items-start justify-between pb-2">
+                                    <CardTitle className="text-base font-medium">{list.name}</CardTitle>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button size="icon" variant="ghost" className="h-8 w-8 -mt-2 -mr-2" onClick={(e) => e.preventDefault()}>
+                                                <MoreVertical className="h-4 w-4" />
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                            <DropdownMenuItem>Rename</DropdownMenuItem>
+                                            <DropdownMenuItem className="text-destructive">Delete List</DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </CardHeader>
+                                <CardContent>
+                                    <div className="flex items-center gap-2 text-2xl font-bold">
+                                        <Users className="h-6 w-6 text-muted-foreground" />
+                                        {list.count.toLocaleString()}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Created on {list.createdAt}</p>
+                                </CardContent>
+                            </Card>
+                        </Link>
                     ))}
                 </CardContent>
             </Card>
