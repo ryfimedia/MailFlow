@@ -1,0 +1,111 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarFooter,
+  SidebarTrigger,
+  SidebarInset,
+} from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
+import {
+  LayoutDashboard,
+  Mail,
+  Users,
+  Settings,
+  Rocket,
+  PlusCircle,
+} from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+export default function AppLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+
+  const menuItems = [
+    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/campaigns", label: "Campaigns", icon: Mail },
+    { href: "/contacts", label: "Contacts", icon: Users },
+    { href: "/settings", label: "Settings", icon: Settings },
+  ];
+
+  return (
+    <SidebarProvider>
+      <Sidebar>
+        <SidebarHeader>
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+              <Rocket className="w-6 h-6" />
+            </div>
+            <h1 className="text-xl font-bold font-headline text-foreground">
+              Ryfi MailFlow
+            </h1>
+          </div>
+        </SidebarHeader>
+        <SidebarContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <Button asChild className="w-full justify-start bg-accent text-accent-foreground hover:bg-accent/90">
+                <Link href="/campaigns/new">
+                  <PlusCircle className="mr-2" />
+                  New Campaign
+                </Link>
+              </Button>
+            </SidebarMenuItem>
+          </SidebarMenu>
+          <SidebarMenu>
+            {menuItems.map((item) => (
+              <SidebarMenuItem key={item.href}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname.startsWith(item.href)
+                  }
+                  tooltip={item.label}
+                >
+                  <Link href={item.href}>
+                    <item.icon />
+                    <span>{item.label}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarContent>
+        <SidebarFooter>
+          <div className="flex items-center gap-3">
+            <Avatar>
+              <AvatarImage src="https://placehold.co/40x40" data-ai-hint="profile picture"/>
+              <AvatarFallback>U</AvatarFallback>
+            </Avatar>
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold">User</span>
+              <span className="text-xs text-muted-foreground">user@email.com</span>
+            </div>
+          </div>
+        </SidebarFooter>
+      </Sidebar>
+      <SidebarInset>
+        <header className="flex items-center justify-between p-4 bg-background border-b md:justify-end">
+          <SidebarTrigger className="md:hidden" />
+          <div className="flex items-center gap-4">
+             {/* Future user menu can be added here */}
+          </div>
+        </header>
+        <main className="p-4 md:p-6 lg:p-8">{children}</main>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
