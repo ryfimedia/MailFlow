@@ -28,9 +28,21 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import Papa from 'papaparse';
 
 
 // Mock data and types - in a real app, these would be defined in a shared types file
+type Contact = {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
+    subscribedAt: string;
+};
+
 type ContactList = {
   id: string;
   name: string;
@@ -176,68 +188,135 @@ export default function ContactsPage() {
   const handleUpload = () => {
     if (!file) return;
 
-    // In a real app, you would parse the CSV here. We'll simulate it.
-    const newContactsCount = Math.floor(Math.random() * 100) + 10;
-    
-    let targetListId = '';
-    let targetListName = '';
-    
-    if (uploadOption === 'new') {
-        if (uploadNewListName.trim().length < 2) {
-            toast({ variant: 'destructive', title: 'Invalid Name', description: 'New list name must be at least 2 characters.' });
-            return;
-        }
-        targetListName = uploadNewListName;
-        const newList: ContactList = {
-            id: crypto.randomUUID(),
-            name: targetListName,
-            count: newContactsCount,
-            createdAt: new Date().toISOString().split('T')[0],
-            isSystemList: false,
-        };
-        targetListId = newList.id;
-        const updatedLists = [...lists, newList];
-        setLists(updatedLists);
-        localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
+    if (uploadOption === 'new' && uploadNewListName.trim().length < 2) {
+        toast({ variant: 'destructive', title: 'Invalid Name', description: 'New list name must be at least 2 characters.' });
+        return;
+    }
+    if (uploadOption === 'existing' && !uploadTargetListId) {
+        toast({ variant: 'destructive', title: 'No List Selected', description: 'Please select an existing list.' });
+        return;
+    }
 
-    } else {
-        if (!uploadTargetListId) {
-            toast({ variant: 'destructive', title: 'No List Selected', description: 'Please select an existing list.' });
-            return;
-        }
-        targetListId = uploadTargetListId;
-        const updatedLists = lists.map(l => {
-            if (l.id === targetListId) {
-                targetListName = l.name;
-                return { ...l, count: l.count + newContactsCount };
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: (results) => {
+            const parsedContacts = results.data as Array<{
+                email?: string;
+                firstName?: string;
+                lastName?: string;
+                phone?: string;
+                company?: string;
+            }>;
+
+            if (!parsedContacts.length || !results.meta.fields?.includes('email')) {
+                toast({ variant: 'destructive', title: "Invalid CSV", description: "The CSV must contain an 'email' column and at least one row." });
+                return;
             }
-            return l;
-        });
-        setLists(updatedLists);
-        localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
-    }
-    
-    // Simulate adding contacts to contactsByList
-    const contactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-    if (!contactsByList[targetListId]) {
-        contactsByList[targetListId] = [];
-    }
-    // Add mock contacts
-    for (let i = 0; i < newContactsCount; i++) {
-        contactsByList[targetListId].push({ id: `csv_${Date.now()}_${i}`, email: `csv.contact.${Date.now()}.${i}@example.com`, firstName: 'CSV', lastName: `User ${i}`, status: 'Subscribed', subscribedAt: new Date().toISOString() });
-    }
-    localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
 
-    toast({ title: "Upload successful!", description: `${newContactsCount} contacts added to "${targetListName}".` });
-    
-    const fileInput = document.getElementById('dropzone-file') as HTMLInputElement;
-    if (fileInput) fileInput.value = "";
-    
-    setFile(null);
-    setUploadModalOpen(false);
-    setUploadNewListName('');
-    setUploadTargetListId('');
-  }
+            try {
+                const contactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
+                const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
+                
+                let targetListId = '';
+                let targetListName = '';
+
+                if (uploadOption === 'new') {
+                    targetListName = uploadNewListName;
+                    const newList: ContactList = {
+                        id: crypto.randomUUID(),
+                        name: targetListName,
+                        count: 0,
+                        createdAt: new Date().toISOString().split('T')[0],
+                        isSystemList: false,
+                    };
+                    targetListId = newList.id;
+                    allListsData.push(newList);
+                    contactsByList[targetListId] = [];
+                } else {
+                    targetListId = uploadTargetListId;
+                    const listInfo = allListsData.find(l => l.id === targetListId);
+                    if (!listInfo) {
+                       toast({ variant: 'destructive', title: "Error", description: "Target list not found." });
+                       return;
+                    }
+                    targetListName = listInfo.name;
+                }
+
+                const targetListContacts: Contact[] = contactsByList[targetListId] || [];
+                const existingEmails = new Set(targetListContacts.map(c => c.email));
+                let newContactsAddedCount = 0;
+                let duplicatesSkippedCount = 0;
+
+                const allContactsList: Contact[] = contactsByList['all'] || [];
+                const allEmails = new Set(allContactsList.map(c => c.email));
+
+                parsedContacts.forEach(row => {
+                    if (row.email && typeof row.email === 'string') {
+                        const sanitizedEmail = row.email.trim().toLowerCase();
+                        if (sanitizedEmail && !existingEmails.has(sanitizedEmail)) {
+                            const newContact: Contact = {
+                                id: crypto.randomUUID(),
+                                email: sanitizedEmail,
+                                firstName: row.firstName || '',
+                                lastName: row.lastName || '',
+                                phone: row.phone || '',
+                                company: row.company || '',
+                                status: 'Subscribed',
+                                subscribedAt: new Date().toISOString(),
+                            };
+                            targetListContacts.push(newContact);
+                            
+                            if (!allEmails.has(sanitizedEmail)) {
+                                allContactsList.push(newContact);
+                                allEmails.add(sanitizedEmail);
+                            }
+                            
+                            existingEmails.add(sanitizedEmail);
+                            newContactsAddedCount++;
+                        } else {
+                            duplicatesSkippedCount++;
+                        }
+                    }
+                });
+
+                contactsByList[targetListId] = targetListContacts;
+                contactsByList['all'] = allContactsList;
+                
+                const updatedLists = allListsData.map(l => {
+                    if (l.id === targetListId || l.id === 'all') {
+                        return { ...l, count: contactsByList[l.id].length };
+                    }
+                    return l;
+                });
+                
+                localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
+                localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
+                setLists(updatedLists);
+
+                toast({
+                    title: "Import Complete!",
+                    description: `${newContactsAddedCount} contacts added to "${targetListName}". ${duplicatesSkippedCount > 0 ? `${duplicatesSkippedCount} duplicates were skipped.` : ''}`,
+                });
+
+                const fileInput = document.getElementById('dropzone-file') as HTMLInputElement;
+                if (fileInput) fileInput.value = "";
+                setFile(null);
+                setUploadModalOpen(false);
+                setUploadNewListName('');
+                setUploadTargetListId('');
+
+            } catch (error) {
+                console.error("Error processing CSV:", error);
+                toast({ variant: 'destructive', title: "An error occurred during import." });
+            }
+        },
+        error: (error: Error) => {
+            console.error("CSV parsing error:", error);
+            toast({ variant: 'destructive', title: "CSV Parsing Error", description: error.message });
+        }
+    });
+  };
 
   return (
     <>
