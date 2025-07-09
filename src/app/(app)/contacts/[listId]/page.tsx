@@ -4,7 +4,7 @@
 import React from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown } from "lucide-react";
+import { ArrowLeft, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Plus } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -27,7 +27,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
   DropdownMenuCheckboxItem,
-  DropdownMenuSeparator
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuPortal,
 } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,79 +39,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 
-// Mock data - in a real app, this would come from an API
-const contactLists = [
-  { id: '1', name: 'Newsletter Subscribers', count: 1250, createdAt: '2023-08-15', isSystemList: false },
-  { id: '2', name: 'Q2 Webinar Attendees', count: 320, createdAt: '2023-06-20', isSystemList: false },
-  { id: '3', name: 'High-Value Customers', count: 85, createdAt: '2023-09-01', isSystemList: false },
-  { id: '4', name: 'New Signups (Last 30 Days)', count: 450, createdAt: '2023-09-10', isSystemList: false },
-  { id: 'unsubscribes', name: 'Unsubscribes', count: 37, createdAt: 'System Managed', isSystemList: true },
-  { id: 'bounces', name: 'Bounced Emails', count: 25, createdAt: 'System Managed', isSystemList: true },
-];
-
-const contactsByList: { [key: string]: any[] } = {
-    '1': Array.from({ length: 25 }, (_, i) => ({
-        id: `contact_${i + 1}`,
-        firstName: `Subscriber`,
-        lastName: `${i + 1}`,
-        email: `subscriber.${i + 1}@example.com`,
-        phone: `555-010${i % 10}`,
-        company: `Company ${String.fromCharCode(65 + (i % 26))}`,
-        status: 'Subscribed',
-        subscribedAt: '2023-10-01',
-    })),
-    '2': Array.from({ length: 10 }, (_, i) => ({
-        id: `webinar_${i + 1}`,
-        firstName: `Attendee`,
-        lastName: `${i + 1}`,
-        email: `attendee.${i + 1}@example.com`,
-        phone: `555-011${i % 10}`,
-        company: `Corp ${String.fromCharCode(65 + (i % 26))}`,
-        status: 'Subscribed',
-        subscribedAt: '2023-06-21',
-    })),
-    '3': Array.from({ length: 5 }, (_, i) => ({
-        id: `customer_${i + 1}`,
-        firstName: `Valued`,
-        lastName: `Customer ${i + 1}`,
-        email: `customer.${i + 1}@example.com`,
-        phone: `555-012${i % 10}`,
-        company: `Client Inc. ${String.fromCharCode(65 + (i % 26))}`,
-        status: 'Subscribed',
-        subscribedAt: '2023-09-02',
-    })),
-    '4': Array.from({ length: 15 }, (_, i) => ({
-        id: `signup_${i + 1}`,
-        firstName: `New`,
-        lastName: `User ${i + 1}`,
-        email: `newuser.${i + 1}@example.com`,
-        phone: `555-013${i % 10}`,
-        company: `Startup ${String.fromCharCode(65 + (i % 26))}`,
-        status: 'Subscribed',
-        subscribedAt: '2023-09-15',
-    })),
-    'unsubscribes': Array.from({ length: 37 }, (_, i) => ({
-        id: `unsub_${i + 1}`,
-        firstName: `Former`,
-        lastName: `Subscriber ${i + 1}`,
-        email: `unsubscribed.${i + 1}@example.com`,
-        phone: ``,
-        company: ``,
-        status: 'Unsubscribed',
-        subscribedAt: '2023-01-15',
-    })),
-    'bounces': Array.from({ length: 25 }, (_, i) => ({
-        id: `bounce_${i + 1}`,
-        firstName: `Bounced`,
-        lastName: `User ${i + 1}`,
-        email: `bounced.${i + 1}@example.com`,
-        phone: ``,
-        company: ``,
-        status: 'Bounced',
-        subscribedAt: '2023-03-10',
-    })),
-};
-
+// Mock data and types - in a real app, these would be defined in a shared types file
 type Contact = {
     id: string;
     firstName: string;
@@ -115,8 +47,17 @@ type Contact = {
     email: string;
     phone?: string;
     company?: string;
-    status: string;
+    status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
     subscribedAt: string;
+};
+
+type ContactList = {
+    id: string;
+    name: string;
+    count: number;
+    createdAt: string;
+    isSystemList: boolean;
+    isMasterList?: boolean;
 };
 
 const columnConfig = [
@@ -142,17 +83,22 @@ const EditContactFormSchema = z.object({
 type EditContactFormValues = z.infer<typeof EditContactFormSchema>;
 type SortConfig = { key: keyof Contact; direction: 'ascending' | 'descending' } | null;
 
+const CONTACT_LISTS_KEY = 'contactLists';
+const CONTACTS_BY_LIST_KEY = 'contactsByList';
 
 export default function ContactListPage() {
     const params = useParams();
     const listId = params.listId as string;
     const { toast } = useToast();
     
-    const list = contactLists.find(l => l.id === listId);
-    const [contacts, setContacts] = React.useState<Contact[]>(contactsByList[listId] || []);
+    const [list, setList] = React.useState<ContactList | null>(null);
+    const [allLists, setAllLists] = React.useState<ContactList[]>([]);
+    const [contacts, setContacts] = React.useState<Contact[]>([]);
     
     const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false);
     const [selectedContact, setSelectedContact] = React.useState<Contact | null>(null);
+
+    const [selectedContactIds, setSelectedContactIds] = React.useState<string[]>([]);
 
     const [sortConfig, setSortConfig] = React.useState<SortConfig>({ key: 'lastName', direction: 'ascending' });
     const [visibleColumns, setVisibleColumns] = React.useState<Record<ColumnId, boolean>>({
@@ -168,6 +114,29 @@ export default function ContactListPage() {
     const form = useForm<EditContactFormValues>({
         resolver: zodResolver(EditContactFormSchema),
     });
+    
+    React.useEffect(() => {
+        try {
+            const storedLists = localStorage.getItem(CONTACT_LISTS_KEY);
+            const storedContacts = localStorage.getItem(CONTACTS_BY_LIST_KEY);
+            if (storedLists && storedContacts) {
+                const allListsData: ContactList[] = JSON.parse(storedLists);
+                const contactsByListData = JSON.parse(storedContacts);
+                
+                setAllLists(allListsData);
+                const currentList = allListsData.find(l => l.id === listId) || null;
+                setList(currentList);
+                
+                if (currentList) {
+                    setContacts(contactsByListData[listId] || []);
+                }
+            } else {
+                 router.push('/contacts'); // Redirect if no data
+            }
+        } catch (error) {
+            console.error("Failed to load contact data from localStorage", error);
+        }
+    }, [listId]);
 
     React.useEffect(() => {
         if (selectedContact) {
@@ -189,9 +158,18 @@ export default function ContactListPage() {
     const handleEditSubmit = (values: EditContactFormValues) => {
         if (!selectedContact) return;
         
-        setContacts(prevContacts => prevContacts.map(c => 
+        const updatedContacts = contacts.map(c => 
             c.id === selectedContact.id ? { ...c, ...values } : c
-        ));
+        );
+        setContacts(updatedContacts);
+
+        try {
+            const storedContactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
+            storedContactsByList[listId] = updatedContacts;
+            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(storedContactsByList));
+        } catch (error) {
+            console.error("Failed to save updated contact:", error);
+        }
 
         toast({
             title: "Contact Updated",
@@ -230,6 +208,56 @@ export default function ContactListPage() {
     const toggleColumn = (columnId: ColumnId) => {
         setVisibleColumns(prev => ({...prev, [columnId]: !prev[columnId]}));
     }
+
+    const handleSelectAll = (checked: boolean) => {
+        setSelectedContactIds(checked ? sortedContacts.map(c => c.id) : []);
+    };
+    
+    const handleSelectOne = (contactId: string, checked: boolean) => {
+        if (checked) {
+            setSelectedContactIds(prev => [...prev, contactId]);
+        } else {
+            setSelectedContactIds(prev => prev.filter(id => id !== contactId));
+        }
+    };
+    
+    const handleAddToList = (targetListId: string) => {
+        const contactsToAdd = contacts.filter(c => selectedContactIds.includes(c.id));
+        if (contactsToAdd.length === 0) return;
+
+        try {
+            const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
+            const contactsByListData = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
+
+            const targetList = allListsData.find(l => l.id === targetListId);
+            if (!targetList) {
+                toast({ variant: 'destructive', title: "List not found" });
+                return;
+            }
+
+            const existingTargetContacts = contactsByListData[targetListId] || [];
+            const existingEmails = new Set(existingTargetContacts.map((c: Contact) => c.email));
+            const newContactsForTarget = contactsToAdd.filter(c => !existingEmails.has(c.email));
+            
+            contactsByListData[targetListId] = [...existingTargetContacts, ...newContactsForTarget];
+            
+            const updatedLists = allListsData.map(l => 
+                l.id === targetListId ? { ...l, count: contactsByListData[targetListId].length } : l
+            );
+            
+            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByListData));
+            localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
+
+            toast({
+                title: "Contacts Added",
+                description: `${newContactsForTarget.length} contact(s) added to "${targetList.name}".`,
+            });
+            setSelectedContactIds([]);
+        } catch (error) {
+            console.error("Failed to add contacts to list:", error);
+            toast({ variant: 'destructive', title: "An error occurred" });
+        }
+    };
     
     if (!list) {
         return (
@@ -264,6 +292,9 @@ export default function ContactListPage() {
             <ArrowDown className="ml-2 h-4 w-4" />
         );
     };
+
+    const isAllSelected = selectedContactIds.length > 0 && selectedContactIds.length === sortedContacts.length;
+    const isSomeSelected = selectedContactIds.length > 0 && selectedContactIds.length < sortedContacts.length;
 
     return (
         <>
@@ -309,71 +340,103 @@ export default function ContactListPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    {!list.isSystemList && (
-                                        <TableHead className="w-[50px]">
-                                            <Checkbox aria-label="Select all" />
-                                        </TableHead>
-                                    )}
-                                    {columnConfig.map(col => (
-                                        visibleColumns[col.id] && (
-                                            <TableHead key={col.id}>
-                                                <Button variant="ghost" onClick={() => requestSort(col.id)} className="px-2">
-                                                    {col.label}
-                                                    {renderSortArrow(col.id)}
-                                                </Button>
+                         {selectedContactIds.length > 0 && (
+                            <div className="mb-4 flex items-center gap-4 rounded-lg bg-secondary p-3">
+                                <span className="text-sm font-medium">{selectedContactIds.length} selected</span>
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button size="sm" variant="outline">
+                                            <Plus className="mr-2 h-4 w-4" /> Add to list
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        <DropdownMenuLabel>Select a list</DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {allLists.filter(l => !l.isSystemList && l.id !== listId).map(l => (
+                                            <DropdownMenuItem key={l.id} onSelect={() => handleAddToList(l.id)}>
+                                                {l.name}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </div>
+                         )}
+                        <div className="overflow-x-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        {!list.isSystemList && (
+                                            <TableHead className="w-[50px]">
+                                                <Checkbox 
+                                                    aria-label="Select all" 
+                                                    checked={isAllSelected}
+                                                    data-state={isSomeSelected ? 'indeterminate' : (isAllSelected ? 'checked' : 'unchecked')}
+                                                    onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
+                                                />
                                             </TableHead>
-                                        )
-                                    ))}
-                                    {!list.isSystemList && (
-                                        <TableHead>
-                                            <span className="sr-only">Actions</span>
-                                        </TableHead>
-                                    )}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {sortedContacts.map((contact) => (
-                                    <TableRow key={contact.id}>
-                                        {!list.isSystemList && (
-                                            <TableCell>
-                                                <Checkbox aria-label={`Select ${contact.firstName} ${contact.lastName}`} />
-                                            </TableCell>
                                         )}
-                                        {visibleColumns.firstName && <TableCell className="font-medium">{contact.firstName}</TableCell>}
-                                        {visibleColumns.lastName && <TableCell className="font-medium">{contact.lastName}</TableCell>}
-                                        {visibleColumns.email && <TableCell>{contact.email}</TableCell>}
-                                        {visibleColumns.phone && <TableCell>{contact.phone}</TableCell>}
-                                        {visibleColumns.company && <TableCell>{contact.company}</TableCell>}
-                                        {visibleColumns.status &&
-                                            <TableCell>
-                                                <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
-                                            </TableCell>
-                                        }
-                                        {visibleColumns.subscribedAt && <TableCell>{contact.subscribedAt}</TableCell>}
+                                        {columnConfig.map(col => (
+                                            visibleColumns[col.id] && (
+                                                <TableHead key={col.id} style={{ whiteSpace: 'nowrap' }}>
+                                                    <Button variant="ghost" onClick={() => requestSort(col.id)} className="px-2">
+                                                        {col.label}
+                                                        {renderSortArrow(col.id)}
+                                                    </Button>
+                                                </TableHead>
+                                            )
+                                        ))}
                                         {!list.isSystemList && (
-                                            <TableCell>
-                                                <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild>
-                                                        <Button aria-haspopup="true" size="icon" variant="ghost">
-                                                            <MoreVertical className="h-4 w-4" />
-                                                            <span className="sr-only">Toggle menu</span>
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                        <DropdownMenuItem onClick={() => handleEditClick(contact)}>Edit Contact</DropdownMenuItem>
-                                                        <DropdownMenuItem className="text-destructive">Remove from List</DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                </DropdownMenu>
-                                            </TableCell>
+                                            <TableHead>
+                                                <span className="sr-only">Actions</span>
+                                            </TableHead>
                                         )}
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {sortedContacts.map((contact) => (
+                                        <TableRow key={contact.id} data-state={selectedContactIds.includes(contact.id) ? 'selected' : ''}>
+                                            {!list.isSystemList && (
+                                                <TableCell>
+                                                    <Checkbox 
+                                                        aria-label={`Select ${contact.firstName} ${contact.lastName}`}
+                                                        checked={selectedContactIds.includes(contact.id)}
+                                                        onCheckedChange={(checked) => handleSelectOne(contact.id, checked as boolean)}
+                                                     />
+                                                </TableCell>
+                                            )}
+                                            {visibleColumns.firstName && <TableCell className="font-medium">{contact.firstName}</TableCell>}
+                                            {visibleColumns.lastName && <TableCell className="font-medium">{contact.lastName}</TableCell>}
+                                            {visibleColumns.email && <TableCell>{contact.email}</TableCell>}
+                                            {visibleColumns.phone && <TableCell>{contact.phone}</TableCell>}
+                                            {visibleColumns.company && <TableCell>{contact.company}</TableCell>}
+                                            {visibleColumns.status &&
+                                                <TableCell>
+                                                    <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
+                                                </TableCell>
+                                            }
+                                            {visibleColumns.subscribedAt && <TableCell>{contact.subscribedAt}</TableCell>}
+                                            {!list.isSystemList && (
+                                                <TableCell>
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button aria-haspopup="true" size="icon" variant="ghost">
+                                                                <MoreVertical className="h-4 w-4" />
+                                                                <span className="sr-only">Toggle menu</span>
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                            <DropdownMenuItem onClick={() => handleEditClick(contact)}>Edit Contact</DropdownMenuItem>
+                                                            <DropdownMenuItem className="text-destructive">Remove from List</DropdownMenuItem>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            )}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
