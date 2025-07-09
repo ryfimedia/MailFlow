@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting } from "lucide-react";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -98,6 +98,15 @@ const colors = [
 ];
 
 const emojis = ['😀', '😂', '😍', '🤔', '👍', '❤️', '🚀', '🎉', '🔥', '💡', '💯', '🙏', '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯'];
+
+const personalizationTags = [
+  { label: 'First Name', value: '[FirstName]' },
+  { label: 'Last Name', value: '[LastName]' },
+  { label: 'Full Name', value: '[FullName]' },
+  { label: 'Email Address', value: '[Email]' },
+  { label: 'Phone Number', value: '[Phone]' },
+  { label: 'Company Name', value: '[Company]' },
+];
 
 function rgbToHex(rgb: string): string {
   if (rgb.startsWith('#')) return rgb;
@@ -598,6 +607,29 @@ export default function NewCampaignPage() {
                                 <Popover>
                                     <PopoverTrigger asChild><Button variant="outline" size="icon" type="button" title="Insert Emoji" className="h-8 w-8"><Smile className="h-4 w-4" /></Button></PopoverTrigger>
                                     <PopoverContent align="start" className="w-auto p-2"><div className="grid grid-cols-6 gap-1">{emojis.map(emoji => (<Button key={emoji} variant="ghost" size="icon" type="button" className="h-8 w-8 rounded-sm p-0 text-lg" onClick={() => handleEmojiClick(emoji)}>{emoji}</Button>))}</div></PopoverContent>
+                                </Popover>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Insert Personalization Tag" className="h-8 w-8">
+                                            <Tags className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-medium text-muted-foreground px-2">Personalization</p>
+                                            {personalizationTags.map(tag => (
+                                                <Button 
+                                                    key={tag.value} 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    type="button" 
+                                                    className="w-full justify-start" 
+                                                    onClick={() => applyFormat('insertText', tag.value)}>
+                                                    {tag.label}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
                                 </Popover>
                                 <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8" onClick={handleImageInsert}><ImageIcon className="h-4 w-4" /></Button>
                                 <Popover>

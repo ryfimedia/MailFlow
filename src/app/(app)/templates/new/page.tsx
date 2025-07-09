@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Save, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Component, Box, Undo, Paintbrush, RemoveFormatting } from "lucide-react";
+import { Save, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
@@ -82,6 +82,15 @@ const colors = [
 const emojis = [
     '😀', '😂', '😍', '🤔', '👍', '❤️', '🚀', '🎉', '🔥', '💡', '💯', '🙏',
     '🙌', '😎', '😮', '😢', '👋', '👏', '✅', '✨', '😊', '🥳', '😭', '🤯',
+];
+
+const personalizationTags = [
+  { label: 'First Name', value: '[FirstName]' },
+  { label: 'Last Name', value: '[LastName]' },
+  { label: 'Full Name', value: '[FullName]' },
+  { label: 'Email Address', value: '[Email]' },
+  { label: 'Phone Number', value: '[Phone]' },
+  { label: 'Company Name', value: '[Company]' },
 ];
 
 function rgbToHex(rgb: string): string {
@@ -153,9 +162,9 @@ export default function NewTemplatePage() {
 
   React.useEffect(() => {
     if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
-      const isContentDifferent = emailBodyValue.replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
+      const isContentDifferent = (emailBodyValue || '').replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
       if (isContentDifferent) {
-          editorRef.current.innerHTML = emailBodyValue;
+          editorRef.current.innerHTML = emailBodyValue || '';
       }
     }
   }, [emailBodyValue]);
@@ -360,7 +369,7 @@ export default function NewTemplatePage() {
       const existingTemplates = storedTemplatesRaw ? JSON.parse(storedTemplatesRaw) : [];
 
       const newTemplate = {
-        id: new Date().getTime().toString(),
+        id: crypto.randomUUID(),
         name: data.name,
         content: data.emailBody,
       };
@@ -514,6 +523,29 @@ export default function NewTemplatePage() {
                                                     onClick={() => handleEmojiClick(emoji)}
                                                 >
                                                     {emoji}
+                                                </Button>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                                 <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Insert Personalization Tag" className="h-8 w-8">
+                                            <Tags className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="space-y-1">
+                                            <p className="text-xs font-medium text-muted-foreground px-2">Personalization</p>
+                                            {personalizationTags.map(tag => (
+                                                <Button 
+                                                    key={tag.value} 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    type="button" 
+                                                    className="w-full justify-start" 
+                                                    onClick={() => applyFormat('insertText', tag.value)}>
+                                                    {tag.label}
                                                 </Button>
                                             ))}
                                         </div>
