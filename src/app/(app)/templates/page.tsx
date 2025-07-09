@@ -3,6 +3,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Eye, PlusCircle } from 'lucide-react';
@@ -81,9 +82,11 @@ export default function TemplatesPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <h1 className="text-3xl font-bold font-headline">Email Templates</h1>
-                <Button className="bg-accent text-accent-foreground hover:bg-accent/90" disabled>
-                    <PlusCircle className="mr-2 h-4 w-4" />
-                    Create New Template
+                <Button asChild className="bg-accent text-accent-foreground hover:bg-accent/90">
+                    <Link href="/templates/new">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Create New Template
+                    </Link>
                 </Button>
             </div>
 
