@@ -2,7 +2,7 @@
 export type Campaign = {
     id: string;
     name: string;
-    status: 'Sent' | 'Draft' | 'Scheduled';
+    status: 'Sent' | 'Draft' | 'Scheduled' | 'Sending';
     sentDate?: string;
     scheduledAt?: string;
     openRate: string;
@@ -11,6 +11,7 @@ export type Campaign = {
     successfulDeliveries?: number;
     bounces?: number;
     unsubscribes?: number;
+    queuedRecipients?: number;
     recipientListId?: string;
     subject?: string;
     emailBody?: string;
@@ -55,5 +56,8 @@ export type Settings = {
     defaults?: {
         fromName: string;
         fromEmail: string;
+    },
+    api?: {
+        resendApiKey: string;
     }
 }

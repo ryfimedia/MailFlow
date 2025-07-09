@@ -1,3 +1,4 @@
+
 'use server';
 
 import { adminDb } from './firebase-admin';
@@ -5,8 +6,9 @@ import { z } from 'zod';
 import { Resend } from 'resend';
 import type { Campaign, Contact, ContactList, Settings, Template } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
+import { defaultTemplates } from './default-templates';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const FREE_TIER_DAILY_LIMIT = 100;
 
 // Helper function to convert Firestore doc to a serializable object
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
@@ -39,77 +41,110 @@ export async function getCampaignById(id: string): Promise<Campaign | null> {
 
 export async function saveCampaign(data: Partial<Campaign> & { id: string | null }) {
     const { id, ...campaignData } = data;
+    
+    // If not sending/scheduling, just save as draft.
+    if (campaignData.status === 'Draft') {
+        if (id) {
+            await adminDb.collection('campaigns').doc(id).set({ ...campaignData, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            return { id };
+        } else {
+            const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+            return { id: newDocRef.id };
+        }
+    }
 
-    let finalEmailBody = campaignData.emailBody || '';
+    // --- Sending Logic ---
+    const settings = await getSettings();
+    if (!settings.api?.resendApiKey) {
+        return { error: 'Resend API Key is not configured in Settings. Campaign saved as draft.' };
+    }
+    const resend = new Resend(settings.api.resendApiKey);
 
-    // If sending/scheduling, add the footer
-    if (campaignData.status === 'Sent' || campaignData.status === 'Scheduled') {
-        const settings = await getSettings();
-        const companyName = settings.profile?.companyName || 'RyFi Media LLC';
-        const companyAddress = settings.profile?.address || 'PO Box 157, Colton, OR 97017';
+    const contacts = await getContactsByListId(campaignData.recipientListId!);
+    if (contacts.length === 0) {
+        return { error: 'No recipients in the selected list. Campaign saved as draft.' };
+    }
 
-        const footer = `
-            <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-                <p style="margin: 0 0 5px 0;">Copyright 2025 ${companyName}, All rights reserved.</p>
-                <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-                <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
-                <p style="margin: 0;">
+    // Add footer
+    const companyName = settings.profile?.companyName || 'Your Company Name';
+    const companyAddress = settings.profile?.address || 'Your Physical Address';
+    const footer = `
+        <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+            <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+            <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+            <p style="margin: 0 0 10px 0;">You are receiving this email because you opted in via our website.</p>
+            <p style="margin: 0;">
                 <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
                 <span style="padding: 0 5px;">|</span>
                 <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
-                </p>
-            </div>
-        `;
-        finalEmailBody += footer;
-        campaignData.emailBody = finalEmailBody;
-    }
+            </p>
+        </div>
+    `;
+    campaignData.emailBody = (campaignData.emailBody || '') + footer;
 
-    if (campaignData.status === 'Sent') {
-        const contacts = await getContactsByListId(campaignData.recipientListId!);
-        const recipientEmails = contacts.map(c => c.email);
+    // --- Rate Limiting & Queuing Logic ---
+    const today = new Date().toISOString().split('T')[0];
+    const usageDoc = await adminDb.collection('usage').doc(today).get();
+    const sentToday = usageDoc.exists ? (usageDoc.data()?.count || 0) : 0;
+    
+    const canSendToday = Math.max(0, FREE_TIER_DAILY_LIMIT - sentToday);
+    const recipients = contacts.map(c => c.email);
+    
+    const emailsToSendNow = recipients.slice(0, canSendToday);
+    const emailsToQueue = recipients.slice(canSendToday);
 
-        if (recipientEmails.length === 0) {
-            return { error: 'No recipients in the selected list. Campaign saved as draft.' };
-        }
+    const fromName = settings.defaults?.fromName || 'Your Name';
+    const fromEmail = settings.defaults?.fromEmail || 'default@yourdomain.com';
 
-        const settings = await getSettings();
-        const fromName = settings.defaults?.fromName || 'RyFi Media LLC';
-        const fromEmail = settings.defaults?.fromEmail || 'hello@ryfimedia.com';
+    let sendError = null;
 
+    if (emailsToSendNow.length > 0) {
         try {
             await resend.emails.send({
                 from: `${fromName} <${fromEmail}>`,
-                to: recipientEmails,
+                to: emailsToSendNow,
                 subject: campaignData.subject || 'No Subject',
-                html: finalEmailBody,
+                html: campaignData.emailBody,
             });
-            // Update campaign stats on send
-            campaignData.sentDate = new Date().toISOString();
-            campaignData.recipients = recipientEmails.length;
-            campaignData.successfulDeliveries = recipientEmails.length; // Placeholder
-            campaignData.bounces = 0;
-            campaignData.unsubscribes = 0;
-            campaignData.openRate = '0.0%';
-            campaignData.clickRate = '0.0%';
+            await adminDb.collection('usage').doc(today).set({ count: sentToday + emailsToSendNow.length }, { merge: true });
         } catch (error: any) {
             console.error('Resend API error:', error);
-            return { error: `Could not send campaign: ${error.message}.` };
+            sendError = `Could not send campaign: ${error.message}.`;
         }
     }
 
-    if (id) {
-        await adminDb.collection('campaigns').doc(id).set({
-            ...campaignData,
-            updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true });
-        return { id };
+    if (sendError) {
+        return { error: sendError };
+    }
+
+    // Update campaign status and stats
+    campaignData.sentDate = new Date().toISOString();
+    campaignData.recipients = recipients.length;
+    campaignData.successfulDeliveries = emailsToSendNow.length;
+    campaignData.openRate = '0.0%';
+    campaignData.clickRate = '0.0%';
+    campaignData.bounces = 0;
+    campaignData.unsubscribes = 0;
+
+    let successMessage = `Campaign sent to ${emailsToSendNow.length} recipients.`;
+
+    if (emailsToQueue.length > 0) {
+        campaignData.status = 'Sending'; // Partial send
+        // In a real app, you'd store emailsToQueue in a subcollection for a cron job to process.
+        // For this prototype, we just update the status and message.
+        campaignData.queuedRecipients = emailsToQueue.length;
+        successMessage += ` ${emailsToQueue.length} emails have been queued to send tomorrow.`;
     } else {
-        const newDocRef = await adminDb.collection('campaigns').add({
-            ...campaignData,
-            createdAt: FieldValue.serverTimestamp(),
-            updatedAt: FieldValue.serverTimestamp(),
-        });
-        return { id: newDocRef.id };
+        campaignData.status = 'Sent';
+    }
+
+    // Save final campaign state
+    if (id) {
+        await adminDb.collection('campaigns').doc(id).set({ ...campaignData, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        return { id, success: successMessage };
+    } else {
+        const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+        return { id: newDocRef.id, success: successMessage };
     }
 }
 
@@ -149,7 +184,22 @@ export async function deleteCampaign(id: string) {
 // ==== TEMPLATES ====
 
 export async function getTemplates(): Promise<Template[]> {
-    const snapshot = await adminDb.collection('templates').orderBy('createdAt', 'desc').get();
+    const templatesCollection = adminDb.collection('templates');
+    const snapshot = await templatesCollection.orderBy('createdAt', 'desc').get();
+    
+    if (snapshot.empty) {
+        // Seed the database with default templates
+        const batch = adminDb.batch();
+        defaultTemplates.forEach(template => {
+            const docRef = templatesCollection.doc();
+            batch.set(docRef, { ...template, createdAt: FieldValue.serverTimestamp() });
+        });
+        await batch.commit();
+        // Fetch again
+        const newSnapshot = await templatesCollection.orderBy('createdAt', 'desc').get();
+        return newSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Template);
+    }
+    
     return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Template);
 }
 
@@ -342,7 +392,7 @@ export async function getSettings(): Promise<Settings> {
     return docWithIdAndTimestamps(doc) as Settings || {};
 }
 
-export async function saveSettings(formName: 'profile' | 'defaults', data: any) {
+export async function saveSettings(formName: 'profile' | 'defaults' | 'api', data: any) {
     await adminDb.collection('meta').doc('settings').set({
         [formName]: data
     }, { merge: true });

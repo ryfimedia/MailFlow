@@ -35,8 +35,13 @@ const defaultsFormSchema = z.object({
   fromEmail: z.string().email("Please enter a valid email address."),
 });
 
+const apiFormSchema = z.object({
+    resendApiKey: z.string().min(10, "Please enter a valid Resend API key."),
+});
+
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 type DefaultsFormValues = z.infer<typeof defaultsFormSchema>;
+type ApiFormValues = z.infer<typeof apiFormSchema>;
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -52,6 +57,11 @@ export default function SettingsPage() {
     mode: "onChange",
   });
 
+  const apiForm = useForm<ApiFormValues>({
+    resolver: zodResolver(apiFormSchema),
+    mode: "onChange",
+  });
+
   React.useEffect(() => {
     async function fetchSettings() {
         setLoading(true);
@@ -60,6 +70,7 @@ export default function SettingsPage() {
             if (settings) {
                 profileForm.reset(settings.profile || {});
                 defaultsForm.reset(settings.defaults || {});
+                apiForm.reset(settings.api || {});
             }
         } catch (error) {
             console.error("Failed to load settings:", error);
@@ -69,9 +80,9 @@ export default function SettingsPage() {
         }
     }
     fetchSettings();
-  }, [profileForm, defaultsForm, toast]);
+  }, [profileForm, defaultsForm, apiForm, toast]);
   
-  const handleSave = async (data: ProfileFormValues | DefaultsFormValues, formName: 'profile' | 'defaults') => {
+  const handleSave = async (data: ProfileFormValues | DefaultsFormValues | ApiFormValues, formName: 'profile' | 'defaults' | 'api') => {
     try {
       await saveSettings(formName, data);
       toast({
@@ -99,9 +110,10 @@ export default function SettingsPage() {
       <h1 className="text-3xl font-bold font-headline">Settings</h1>
       
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:w-[400px]">
+        <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
           <TabsTrigger value="profile">Company Profile</TabsTrigger>
           <TabsTrigger value="defaults">Campaign Defaults</TabsTrigger>
+          <TabsTrigger value="api">API Keys</TabsTrigger>
         </TabsList>
 
         <TabsContent value="profile">
@@ -198,6 +210,43 @@ export default function SettingsPage() {
             </form>
           </Form>
         </TabsContent>
+
+        <TabsContent value="api">
+           <Form {...apiForm}>
+            <form onSubmit={apiForm.handleSubmit(data => handleSave(data, 'api'))} className="space-y-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>API Keys</CardTitle>
+                  <CardDescription>
+                    Connect third-party services to enable application features.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <FormField
+                    control={apiForm.control}
+                    name="resendApiKey"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Resend API Key</FormLabel>
+                        <FormControl>
+                          <Input type="password" placeholder="re_..." {...field} />
+                        </FormControl>
+                        <FormDescription>
+                            Your API key for sending emails via Resend. The free plan allows 100 emails/day.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+                <CardFooter className="border-t px-6 py-4">
+                   <Button type="submit" disabled={apiForm.formState.isSubmitting}>Save</Button>
+                </CardFooter>
+              </Card>
+            </form>
+          </Form>
+        </TabsContent>
+
       </Tabs>
     </div>
   );

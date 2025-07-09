@@ -73,6 +73,16 @@ export default function CampaignsPage() {
      }
   }
 
+  const getBadgeVariant = (status: Campaign['status']) => {
+    switch (status) {
+        case 'Sent': return 'default';
+        case 'Draft': return 'secondary';
+        case 'Scheduled': return 'outline';
+        case 'Sending': return 'destructive'; // Using destructive for visibility
+        default: return 'secondary';
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -128,10 +138,7 @@ export default function CampaignsPage() {
                   >
                     <TableCell className="font-medium">{campaign.name}</TableCell>
                     <TableCell>
-                      <Badge variant={
-                        campaign.status === 'Sent' ? 'default' :
-                        campaign.status === 'Draft' ? 'secondary' : 'outline'
-                      }>
+                      <Badge variant={getBadgeVariant(campaign.status)}>
                         {campaign.status}
                       </Badge>
                     </TableCell>
