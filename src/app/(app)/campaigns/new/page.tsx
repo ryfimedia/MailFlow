@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile } from "lucide-react";
+import { Wand2, Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus } from "lucide-react";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -158,6 +158,12 @@ export default function NewCampaignPage() {
     if (url) {
       applyFormat("insertImage", url);
     }
+  };
+  
+  const handleInsertDivider = (height: number) => {
+    // We add a paragraph with a break tag to ensure the cursor can move below the divider.
+    const dividerHtml = `<hr style="height: ${height}px; width: 70%; margin: 16px auto; background-color: #cccccc; border: 0;" /><p><br></p>`;
+    applyFormat("insertHTML", dividerHtml);
   };
 
   async function handleGenerateSubject() {
@@ -376,6 +382,23 @@ export default function NewCampaignPage() {
                                     </PopoverContent>
                                 </Popover>
                                 <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8" onClick={handleImageInsert}><ImageIcon className="h-4 w-4" /></Button>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Insert Horizontal Rule" className="h-8 w-8">
+                                            <Minus className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-muted-foreground">Divider Thickness</p>
+                                            <div className="flex flex-col items-stretch gap-2">
+                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(2)}>Thin (2px)</Button>
+                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(5)}>Medium (5px)</Button>
+                                                <Button variant="outline" size="sm" type="button" onClick={() => handleInsertDivider(10)}>Thick (10px)</Button>
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
                             </div>
                           </div>
                           <FormControl>
