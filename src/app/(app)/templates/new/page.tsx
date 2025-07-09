@@ -44,6 +44,8 @@ const templateFormSchema = z.object({
 
 type TemplateFormValues = z.infer<typeof templateFormSchema>;
 
+const TEMPLATES_STORAGE_KEY = 'emailTemplates';
+
 // Mock data for editor controls
 const googleFonts = [
     { name: 'Roboto', family: 'sans-serif' },
@@ -307,12 +309,32 @@ export default function NewTemplatePage() {
   }
 
   function onSubmit(data: TemplateFormValues) {
-    console.log("Saving new template:", data);
-    toast({
-      title: "Template Saved!",
-      description: `Your template "${data.name}" has been successfully saved.`,
-    });
-    router.push('/templates');
+    try {
+      const storedTemplatesRaw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+      const existingTemplates = storedTemplatesRaw ? JSON.parse(storedTemplatesRaw) : [];
+
+      const newTemplate = {
+        id: new Date().getTime().toString(),
+        name: data.name,
+        content: data.emailBody,
+      };
+      
+      const updatedTemplates = [...existingTemplates, newTemplate];
+      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+
+      toast({
+        title: "Template Saved!",
+        description: `Your template "${data.name}" has been successfully saved.`,
+      });
+      router.push('/templates');
+    } catch (error) {
+      console.error("Failed to save template to localStorage", error);
+      toast({
+        variant: "destructive",
+        title: "Error saving template",
+        description: "Could not save the template. Please try again.",
+      });
+    }
   }
 
   return (

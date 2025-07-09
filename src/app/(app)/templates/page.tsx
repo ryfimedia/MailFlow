@@ -15,7 +15,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 
-// Mock data for templates
+// Mock data for templates - This will be the initial fallback
 const initialTemplates = [
   {
     id: '1',
@@ -69,9 +69,32 @@ const initialTemplates = [
   },
 ];
 
+const TEMPLATES_STORAGE_KEY = 'emailTemplates';
+
+type Template = {
+  id: string;
+  name: string;
+  content: string;
+};
+
 export default function TemplatesPage() {
     const router = useRouter();
-    const [templates, setTemplates] = React.useState(initialTemplates);
+    const [templates, setTemplates] = React.useState<Template[]>([]);
+
+    React.useEffect(() => {
+        try {
+            const storedTemplates = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+            if (storedTemplates) {
+                setTemplates(JSON.parse(storedTemplates));
+            } else {
+                localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(initialTemplates));
+                setTemplates(initialTemplates);
+            }
+        } catch (error) {
+            console.error("Failed to load templates from localStorage", error);
+            setTemplates(initialTemplates);
+        }
+    }, []);
 
     const handleUseTemplate = (content: string) => {
         sessionStorage.setItem('selectedTemplateContent', content);

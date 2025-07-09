@@ -70,6 +70,8 @@ const campaignFormSchema = z.object({
 
 type CampaignFormValues = z.infer<typeof campaignFormSchema>;
 
+const TEMPLATES_STORAGE_KEY = 'emailTemplates';
+
 // Mock data for editor controls
 const googleFonts = [
     { name: 'Roboto', family: 'sans-serif' },
@@ -360,16 +362,35 @@ export default function NewCampaignPage() {
       });
       return;
     }
-
-    console.log("Saving template:", { name: templateName, content: emailBody });
     
-    toast({
-      title: "Template Saved!",
-      description: `Your template "${templateName}" has been saved.`,
-    });
+    try {
+      const storedTemplatesRaw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
+      const existingTemplates = storedTemplatesRaw ? JSON.parse(storedTemplatesRaw) : [];
 
-    setTemplateName("");
-    setIsSaveTemplateOpen(false);
+      const newTemplate = {
+        id: new Date().getTime().toString(),
+        name: templateName,
+        content: emailBody,
+      };
+
+      const updatedTemplates = [...existingTemplates, newTemplate];
+      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
+      
+      toast({
+        title: "Template Saved!",
+        description: `Your template "${templateName}" has been saved.`,
+      });
+
+      setTemplateName("");
+      setIsSaveTemplateOpen(false);
+    } catch (error) {
+      console.error("Failed to save template to localStorage", error);
+      toast({
+        variant: "destructive",
+        title: "Error saving template",
+        description: "Could not save the template. Please try again.",
+      });
+    }
   };
 
   function onSubmit(data: CampaignFormValues) {
