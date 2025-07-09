@@ -2,10 +2,10 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from '@/components/ui/card';
 import { Eye, PlusCircle } from 'lucide-react';
-import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -69,14 +69,12 @@ const initialTemplates = [
 ];
 
 export default function TemplatesPage() {
-    const { toast } = useToast();
+    const router = useRouter();
     const [templates, setTemplates] = React.useState(initialTemplates);
 
-    const handleUseTemplate = () => {
-        toast({
-            title: "Template applied!",
-            description: "Functionality to apply template is coming soon.",
-        });
+    const handleUseTemplate = (content: string) => {
+        sessionStorage.setItem('selectedTemplateContent', content);
+        router.push('/campaigns/new');
     }
 
     return (
@@ -122,7 +120,7 @@ export default function TemplatesPage() {
                                         </div>
                                     </DialogContent>
                                 </Dialog>
-                                <Button size="sm" onClick={handleUseTemplate} disabled>Use Template</Button>
+                                <Button size="sm" onClick={() => handleUseTemplate(template.content)}>Use Template</Button>
                             </CardFooter>
                         </Card>
                     ))}

@@ -130,6 +130,17 @@ export default function NewCampaignPage() {
   const emailBodyForAI = emailBodyValue.replace(/<[^>]+>/g, '');
 
   React.useEffect(() => {
+    const templateContent = sessionStorage.getItem('selectedTemplateContent');
+    if (templateContent) {
+      form.setValue('emailBody', templateContent, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+      sessionStorage.removeItem('selectedTemplateContent');
+    }
+  }, [form]);
+
+  React.useEffect(() => {
     form.setValue("scheduledAt", date);
   }, [date, form]);
   
