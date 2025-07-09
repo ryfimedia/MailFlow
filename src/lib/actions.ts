@@ -66,13 +66,13 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     }
 
     // Add footer
-    const companyName = settings.profile?.companyName || 'Your Company Name';
-    const companyAddress = settings.profile?.address || 'Your Physical Address';
+    const companyName = settings.profile?.companyName || 'Your Company LLC';
+    const companyAddress = settings.profile?.address || 'PO Box 157, Colton, OR 97017';
     const footer = `
         <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
             <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
             <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-            <p style="margin: 0 0 10px 0;">You are receiving this email because you opted in via our website.</p>
+            <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
             <p style="margin: 0;">
                 <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
                 <span style="padding: 0 5px;">|</span>
@@ -224,16 +224,49 @@ export async function deleteTemplate(id: string) {
 // ==== CONTACTS & LISTS ====
 
 export async function getContactLists(): Promise<ContactList[]> {
-    const snapshot = await adminDb.collection('lists').get();
-    // Sort system lists to the top
-    const lists = snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as ContactList);
-    return lists.sort((a, b) => {
-        if (a.isSystemList && !b.isSystemList) return -1;
-        if (!a.isSystemList && b.isSystemList) return 1;
-        if (a.isMasterList) return -1;
-        if (b.isMasterList) return 1;
-        return a.name.localeCompare(b.name);
-    });
+    const listsCollection = adminDb.collection('lists');
+    const snapshot = await listsCollection.get();
+
+    const sortLists = (lists: ContactList[]) => {
+        return lists.sort((a, b) => {
+            if (a.isSystemList && !b.isSystemList) return -1;
+            if (!a.isSystemList && b.isSystemList) return 1;
+            if (a.isMasterList) return -1;
+            if (b.isMasterList) return 1;
+            return a.name.localeCompare(b.name);
+        });
+    };
+
+    if (snapshot.empty) {
+        const batch = adminDb.batch();
+
+        // System Lists
+        batch.set(listsCollection.doc('all'), { name: 'All Contacts', count: 1, createdAt: FieldValue.serverTimestamp(), isSystemList: true, isMasterList: true });
+        batch.set(listsCollection.doc('unsubscribes'), { name: 'Unsubscribes', count: 0, createdAt: FieldValue.serverTimestamp(), isSystemList: true });
+        batch.set(listsCollection.doc('bounces'), { name: 'Bounces', count: 0, createdAt: FieldValue.serverTimestamp(), isSystemList: true });
+
+        // Default User List
+        const testingListRef = listsCollection.doc();
+        batch.set(testingListRef, { name: 'Testing', count: 1, createdAt: FieldValue.serverTimestamp(), isSystemList: false });
+
+        // Default Contact
+        const contactRef = adminDb.collection('contacts').doc();
+        batch.set(contactRef, {
+            email: 'user@email.com',
+            firstName: 'Test',
+            lastName: 'User',
+            status: 'Subscribed',
+            subscribedAt: new Date().toISOString(),
+            listIds: ['all', testingListRef.id]
+        });
+        
+        await batch.commit();
+
+        const newSnapshot = await listsCollection.get();
+        return sortLists(newSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as ContactList));
+    }
+    
+    return sortLists(snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as ContactList));
 }
 
 export async function getContactListById(id: string): Promise<ContactList | null> {
@@ -260,6 +293,16 @@ export async function renameList(id: string, newName: string): Promise<void> {
 }
 
 export async function deleteList(id: string): Promise<void> {
+    const listRef = adminDb.collection('lists').doc(id);
+    const listDoc = await listRef.get();
+
+    if (!listDoc.exists) {
+        throw new Error("List not found.");
+    }
+    if (listDoc.data()?.isSystemList) {
+        throw new Error("Cannot delete a system list.");
+    }
+
     const batch = adminDb.batch();
     
     // Remove listId from all contacts
@@ -269,7 +312,6 @@ export async function deleteList(id: string): Promise<void> {
     });
 
     // Delete the list document itself
-    const listRef = adminDb.collection('lists').doc(id);
     batch.delete(listRef);
 
     await batch.commit();
@@ -278,6 +320,7 @@ export async function deleteList(id: string): Promise<void> {
 export async function updateContact(contactId: string, data: Partial<Contact>, currentListId: string): Promise<void> {
     const contactRef = adminDb.collection('contacts').doc(contactId);
     const oldContactSnap = await contactRef.get();
+    if (!oldContactSnap.exists) throw new Error("Contact not found");
     const oldContactData = oldContactSnap.data() as Contact;
     
     const oldStatus = oldContactData.status;
@@ -288,11 +331,16 @@ export async function updateContact(contactId: string, data: Partial<Contact>, c
 
     if (oldStatus !== newStatus) {
         if (newStatus === 'Unsubscribed') {
-            const unsubList = (await adminDb.collection('lists').where('id', '==', 'unsubscribes').get()).docs[0];
-            batch.update(contactRef, { status: 'Unsubscribed', listIds: ['unsubscribes'] });
+            // When unsubscribing, remove from all lists and add to the single "unsubscribes" list.
+            batch.update(contactRef, { listIds: ['unsubscribes'] });
         } else if (newStatus === 'Subscribed' && oldStatus !== 'Subscribed') {
-            // Re-subscribing adds them back to the original list and the 'all' list
-            batch.update(contactRef, { status: 'Subscribed', listIds: FieldValue.arrayUnion('all', currentListId) });
+            // When re-subscribing, remove from 'unsubscribes'/'bounces' and add to 'all' and the current list.
+            batch.update(contactRef, {
+                listIds: FieldValue.arrayUnion('all', currentListId)
+            });
+            batch.update(contactRef, {
+                listIds: FieldValue.arrayRemove('unsubscribes', 'bounces')
+            });
         }
     }
     await batch.commit();
