@@ -235,7 +235,7 @@ export default function NewCampaignPage() {
 
   const handleFontSize = (size: string) => {
     const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0 || range.collapsed) return;
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed) return;
     const range = selection.getRangeAt(0);
     if (range.collapsed) return;
     const getSelectionHtml = () => {
@@ -358,7 +358,7 @@ export default function NewCampaignPage() {
     try {
       const storedTemplatesRaw = localStorage.getItem(TEMPLATES_STORAGE_KEY);
       const existingTemplates = storedTemplatesRaw ? JSON.parse(storedTemplatesRaw) : [];
-      const newTemplate = { id: new Date().getTime().toString(), name: templateName, content: emailBody };
+      const newTemplate = { id: crypto.randomUUID(), name: templateName, content: emailBody };
       const updatedTemplates = [...existingTemplates, newTemplate];
       localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(updatedTemplates));
       toast({ title: "Template Saved!", description: `Your template "${templateName}" has been saved.` });
@@ -375,7 +375,7 @@ export default function NewCampaignPage() {
     const status = statusOverride ? 'Draft' : (data.scheduledAt ? "Scheduled" : "Sent");
     
     const campaignData = {
-      id: isEditing ? campaignId : new Date().getTime().toString(),
+      id: isEditing ? campaignId : crypto.randomUUID(),
       name: data.name,
       recipientListId: data.recipientListId,
       subject: data.subject,
@@ -383,7 +383,7 @@ export default function NewCampaignPage() {
       emailBackgroundColor: data.emailBackgroundColor,
       scheduledAt: data.scheduledAt ? data.scheduledAt.toISOString() : undefined,
       status,
-      sentDate: status === 'Sent' ? new Date().toISOString().split('T')[0] : (data.scheduledAt ? data.scheduledAt.toISOString().split('T')[0] : '-'),
+      sentDate: status === 'Sent' ? new Date().toISOString() : (data.scheduledAt ? data.scheduledAt.toISOString() : undefined),
       openRate: '-',
       clickRate: '-',
     };
@@ -413,17 +413,7 @@ export default function NewCampaignPage() {
   };
   
   const handleSaveDraft = () => {
-    form.trigger(["name", "recipientListId", "subject", "emailBody"]).then((isValid) => {
-        if (isValid) {
-            onSubmit(form.getValues(), 'Draft');
-        } else {
-            toast({
-                variant: 'destructive',
-                title: 'Cannot Save Draft',
-                description: 'Please provide a Campaign Name, Recipient List, Subject, and Email Body before saving a draft.',
-            });
-        }
-    });
+    onSubmit(form.getValues(), 'Draft');
   };
 
   const pageTitle = campaignId ? "Edit Campaign" : "New Campaign";

@@ -25,7 +25,7 @@ const initialCampaigns = [
     id: "1",
     name: "🚀 Q2 Product Launch",
     status: "Sent",
-    sentDate: "2023-06-15",
+    sentDate: "2023-06-15T12:00:00.000Z",
     openRate: "35.2%",
     clickRate: "5.8%",
     recipients: 8500,
@@ -37,7 +37,7 @@ const initialCampaigns = [
     id: "2",
     name: "☀️ Summer Sale Promo",
     status: "Sent",
-    sentDate: "2023-07-01",
+    sentDate: "2023-07-01T12:00:00.000Z",
     openRate: "28.9%",
     clickRate: "4.1%",
     recipients: 12500,
@@ -49,7 +49,7 @@ const initialCampaigns = [
     id: "3",
     name: "🍂 Fall Newsletter",
     status: "Draft",
-    sentDate: "-",
+    sentDate: undefined,
     openRate: "-",
     clickRate: "-",
   },
@@ -57,7 +57,7 @@ const initialCampaigns = [
     id: "4",
     name: "🎁 Holiday Greetings",
     status: "Scheduled",
-    sentDate: "2023-12-20",
+    sentDate: "2023-12-20T12:00:00.000Z",
     openRate: "-",
     clickRate: "-",
   },
@@ -65,7 +65,7 @@ const initialCampaigns = [
     id: "5",
     name: "Webinars Coming Up",
     status: "Sent",
-    sentDate: "2023-08-10",
+    sentDate: "2023-08-10T12:00:00.000Z",
     openRate: "22.1%",
     clickRate: "3.5%",
     recipients: 320,
@@ -112,15 +112,23 @@ export default function CampaignsPage() {
 
     const newCampaign = {
         ...campaignToDuplicate,
-        id: new Date().getTime().toString(),
+        id: crypto.randomUUID(),
         name: `Copy of ${campaignToDuplicate.name}`,
         status: 'Draft',
-        sentDate: '-',
+        sentDate: undefined,
+        scheduledAt: undefined,
         openRate: '-',
         clickRate: '-',
     };
+    
+    // Remove properties that shouldn't be carried over
+    delete (newCampaign as Partial<Campaign>).recipients;
+    delete (newCampaign as Partial<Campaign>).successfulDeliveries;
+    delete (newCampaign as Partial<Campaign>).bounces;
+    delete (newCampaign as Partial<Campaign>).unsubscribes;
 
-    const updatedCampaigns = [...campaigns, newCampaign];
+
+    const updatedCampaigns = [...campaigns, newCampaign as Campaign];
     setCampaigns(updatedCampaigns);
     localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(updatedCampaigns));
     toast({ title: 'Campaign Duplicated', description: `A new draft "${newCampaign.name}" has been created.` });
@@ -173,7 +181,7 @@ export default function CampaignsPage() {
                       {campaign.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{campaign.sentDate !== '-' ? new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'}</TableCell>
+                  <TableCell>{campaign.sentDate ? new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'}</TableCell>
                   <TableCell>{campaign.openRate}</TableCell>
                   <TableCell>{campaign.clickRate}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
