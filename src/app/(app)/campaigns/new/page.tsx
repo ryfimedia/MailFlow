@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags } from "lucide-react";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags, Loader2 } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -42,6 +42,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { sendCampaignEmail } from "@/actions/send-email";
+
 
 // Mock data, in a real app this would come from an API
 const allContactLists = [
@@ -56,6 +58,8 @@ const allContactLists = [
 const mailingLists = allContactLists.filter(list => !list.isSystemList);
 const CAMPAIGNS_KEY = 'campaigns';
 const SETTINGS_KEY = 'appSettings';
+const CONTACTS_BY_LIST_KEY = 'contactsByList';
+
 
 const campaignFormSchema = z.object({
   name: z.string().min(3, { message: "Campaign name must be at least 3 characters." }).or(z.literal("")),
@@ -132,6 +136,7 @@ export default function NewCampaignPage() {
   const [campaignId, setCampaignId] = React.useState<string | null>(null);
   const [date, setDate] = React.useState<Date>();
   const editorRef = React.useRef<HTMLDivElement>(null);
+  const [isSending, setIsSending] = React.useState(false);
   
   const [dividerColor, setDividerColor] = React.useState('#cccccc');
   const [isSaveTemplateOpen, setIsSaveTemplateOpen] = React.useState(false);
@@ -200,10 +205,9 @@ export default function NewCampaignPage() {
   React.useEffect(() => { form.setValue("scheduledAt", date); }, [date, form]);
   
   React.useEffect(() => {
-    const currentBody = emailBodyValue || '';
-    if (editorRef.current && currentBody !== editorRef.current.innerHTML) {
-      const isContentDifferent = currentBody.replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
-      if (isContentDifferent) { editorRef.current.innerHTML = currentBody; }
+    if (editorRef.current && emailBodyValue !== editorRef.current.innerHTML) {
+      const isContentDifferent = (emailBodyValue || '').replace(/&nbsp;/g, ' ') !== editorRef.current.innerHTML.replace(/&nbsp;/g, ' ');
+      if (isContentDifferent) { editorRef.current.innerHTML = emailBodyValue || ''; }
     }
   }, [emailBodyValue]);
   
@@ -387,15 +391,15 @@ export default function NewCampaignPage() {
     }
   };
 
-  function onSubmit(data: CampaignFormValues, statusOverride?: 'Draft') {
+  async function onSubmit(data: CampaignFormValues, statusOverride?: 'Draft') {
     const isEditing = !!campaignId;
-    const status = statusOverride ? 'Draft' : (data.scheduledAt ? "Scheduled" : "Sent");
+    let status = statusOverride ? 'Draft' : (data.scheduledAt ? "Scheduled" : "Sent");
     
     let finalEmailBody = data.emailBody || '';
 
     if (status === 'Sent' || status === 'Scheduled') {
-        let companyName = "Your Company LLC";
-        let companyAddress = "123 Main St, Anytown, USA 12345";
+        let companyName = "RyFi Media LLC";
+        let companyAddress = "PO Box 157, Colton, OR 97017";
         
         try {
             const settingsRaw = localStorage.getItem(SETTINGS_KEY);
@@ -410,14 +414,55 @@ export default function NewCampaignPage() {
         
         const footer = `
             <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-              <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+              <p style="margin: 0 0 5px 0;">Copyright 2025 ${companyName}, All rights reserved.</p>
               <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-              <a href="#unsubscribe" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+              <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
+              <a href="#unsubscribe" style="color: #888888; text-decoration: underline;">Click HERE to unsubscribe from future emails.</a>
             </div>
         `;
         finalEmailBody += footer;
     }
 
+    const contactsByListRaw = localStorage.getItem(CONTACTS_BY_LIST_KEY);
+    const contactsByList = contactsByListRaw ? JSON.parse(contactsByListRaw) : {};
+    const recipientList = contactsByList[data.recipientListId] || [];
+
+    if (status === 'Sent') {
+        setIsSending(true);
+        try {
+            const settingsRaw = localStorage.getItem(SETTINGS_KEY);
+            const settings = settingsRaw ? JSON.parse(settingsRaw) : {};
+            const fromName = settings.defaults?.fromName || "RyFi Media LLC";
+            const fromEmail = settings.defaults?.fromEmail || `hello@ryfimedia.com`;
+            const fromAddress = `${fromName} <${fromEmail}>`;
+
+            const recipientEmails = recipientList.map((c: any) => c.email);
+
+            if (recipientEmails.length === 0) {
+                toast({ variant: "destructive", title: "Send Error", description: "No recipients in the selected list. Campaign saved as draft." });
+                status = 'Draft';
+            } else {
+                const sendResult = await sendCampaignEmail({
+                  from: fromAddress,
+                  to: recipientEmails,
+                  subject: data.subject || 'No Subject',
+                  html: finalEmailBody,
+                });
+
+                if (sendResult.error) {
+                    toast({ variant: "destructive", title: "Send Error", description: `Could not send campaign: ${sendResult.error}. It has been saved as a draft.` });
+                    status = 'Draft';
+                }
+            }
+        } catch (e) {
+            console.error("Error during email sending process:", e);
+            toast({ variant: "destructive", title: "Send Error", description: "An unexpected error occurred. Campaign saved as draft." });
+            status = 'Draft';
+        } finally {
+            setIsSending(false);
+        }
+    }
+    
     const campaignData = {
       id: isEditing ? campaignId : crypto.randomUUID(),
       name: data.name,
@@ -428,8 +473,12 @@ export default function NewCampaignPage() {
       scheduledAt: data.scheduledAt ? data.scheduledAt.toISOString() : undefined,
       status,
       sentDate: status === 'Sent' ? new Date().toISOString() : (data.scheduledAt ? data.scheduledAt.toISOString() : undefined),
-      openRate: status === 'Sent' ? `${(Math.random() * (40 - 15) + 15).toFixed(1)}%` : '-',
-      clickRate: status === 'Sent' ? `${(Math.random() * (8 - 1) + 1).toFixed(1)}%` : '-',
+      openRate: status === 'Sent' ? '0.0%' : '-',
+      clickRate: status === 'Sent' ? '0.0%' : '-',
+      recipients: status === 'Sent' ? recipientList.length : undefined,
+      successfulDeliveries: status === 'Sent' ? recipientList.length : undefined, // Assume success for proto
+      bounces: status === 'Sent' ? 0 : undefined,
+      unsubscribes: status === 'Sent' ? 0 : undefined,
     };
 
     try {
@@ -455,7 +504,7 @@ export default function NewCampaignPage() {
   const handleSendOrSchedule = async () => {
     const isValid = await form.trigger();
     if (isValid) {
-      onSubmit(form.getValues());
+      await onSubmit(form.getValues());
     } else {
       toast({
         variant: "destructive",
@@ -467,10 +516,9 @@ export default function NewCampaignPage() {
   
   const handleSaveDraft = () => {
     const data = form.getValues();
-    // For drafts, we don't need validation except maybe a name
     if (!data.name) {
+      form.setValue("name", "Untitled Draft");
       data.name = "Untitled Draft";
-      form.setValue("name", data.name);
     }
     onSubmit(data, 'Draft');
   };
@@ -498,9 +546,13 @@ export default function NewCampaignPage() {
                 <CalendarComponent mode="single" selected={date} onSelect={setDate} initialFocus />
               </PopoverContent>
             </Popover>
-            <Button type="button" onClick={handleSendOrSchedule} className="bg-accent text-accent-foreground hover:bg-accent/90">
-              <Send className="mr-2 h-4 w-4" />
-              {date ? "Schedule" : "Send Now"}
+            <Button type="button" onClick={handleSendOrSchedule} className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSending}>
+              {isSending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              {isSending ? 'Sending...' : (date ? "Schedule" : "Send Now")}
             </Button>
           </div>
         </div>
