@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo } from "lucide-react";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -65,6 +65,7 @@ const campaignFormSchema = z.object({
     { message: "Email body must contain at least 20 characters of text." }
   ),
   scheduledAt: z.date().optional(),
+  emailBackgroundColor: z.string().optional(),
 });
 
 type CampaignFormValues = z.infer<typeof campaignFormSchema>;
@@ -149,16 +150,20 @@ export default function NewCampaignPage() {
   
   const [selectedElement, setSelectedElement] = React.useState<HTMLElement | null>(null);
 
+  const [isPageStylePopoverOpen, setIsPageStylePopoverOpen] = React.useState(false);
+
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
     mode: "onChange",
     defaultValues: {
       subject: "",
       emailBody: "",
+      emailBackgroundColor: "#ffffff",
     },
   });
 
   const emailBodyValue = form.watch("emailBody");
+  const emailBackgroundColor = form.watch("emailBackgroundColor");
 
   React.useEffect(() => {
     const templateContent = sessionStorage.getItem('selectedTemplateContent');
@@ -694,6 +699,31 @@ export default function NewCampaignPage() {
                                     </PopoverContent>
                                 </Popover>
                             </div>
+                            <div className="h-6 border-l border-border mx-1"></div>
+                            <div className="flex items-center gap-1">
+                                <Popover open={isPageStylePopoverOpen} onOpenChange={setIsPageStylePopoverOpen}>
+                                    <PopoverTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Page Styles" className="h-8 w-8">
+                                            <Paintbrush className="h-4 w-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="start" className="w-auto p-4">
+                                        <div className="space-y-4">
+                                            <p className="text-sm font-medium">Page Styles</p>
+                                            <div className="flex items-center gap-2">
+                                                <Label htmlFor="page-bg-color" className="text-xs whitespace-nowrap">Background Color</Label>
+                                                <Input
+                                                    id="page-bg-color"
+                                                    type="color"
+                                                    className="h-8 w-8 p-0 border-none"
+                                                    value={emailBackgroundColor || '#ffffff'}
+                                                    onChange={(e) => form.setValue("emailBackgroundColor", e.target.value)}
+                                                />
+                                            </div>
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            </div>
                           </div>
                           <FormControl>
                             <div
@@ -701,8 +731,9 @@ export default function NewCampaignPage() {
                                 contentEditable={true}
                                 onInput={(e) => field.onChange(e.currentTarget.innerHTML)}
                                 onClick={handleEditorClick}
-                                className="email-editor min-h-[400px] w-full rounded-b-md border-0 bg-background p-4 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                                className="email-editor min-h-[400px] w-full rounded-b-md border-0 p-4 text-base ring-offset-background text-black placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
+                                style={{ backgroundColor: emailBackgroundColor || '#ffffff' }}
                               />
                           </FormControl>
                         </div>
