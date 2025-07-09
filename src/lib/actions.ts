@@ -66,7 +66,7 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     }
 
     // Add footer
-    const companyName = settings.profile?.companyName || 'Your Company LLC';
+    const companyName = settings.profile?.companyName || 'RyFi Media LLC';
     const companyAddress = settings.profile?.address || 'PO Box 157, Colton, OR 97017';
     const footer = `
         <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
@@ -225,48 +225,84 @@ export async function deleteTemplate(id: string) {
 
 export async function getContactLists(): Promise<ContactList[]> {
     const listsCollection = adminDb.collection('lists');
-    const snapshot = await listsCollection.get();
+    const contactsCollection = adminDb.collection('contacts');
 
-    const sortLists = (lists: ContactList[]) => {
-        return lists.sort((a, b) => {
-            if (a.isSystemList && !b.isSystemList) return -1;
-            if (!a.isSystemList && b.isSystemList) return 1;
-            if (a.isMasterList) return -1;
-            if (b.isMasterList) return 1;
-            return a.name.localeCompare(b.name);
+    // --- Seeding Logic ---
+    let listsSnapshot = await listsCollection.get();
+    const batch = adminDb.batch();
+    let isSeedingPerformed = false;
+
+    const existingListIds = new Set(listsSnapshot.docs.map(doc => doc.id));
+
+    // 1. Seed System Lists
+    const systemListsToCreate = [
+        { id: 'all', data: { name: 'All Contacts', isSystemList: true, isMasterList: true } },
+        { id: 'unsubscribes', data: { name: 'Unsubscribes', isSystemList: true } },
+        { id: 'bounces', data: { name: 'Bounces', isSystemList: true } }
+    ].filter(list => !existingListIds.has(list.id));
+
+    if (systemListsToCreate.length > 0) {
+        systemListsToCreate.forEach(listInfo => {
+            batch.set(listsCollection.doc(listInfo.id), { ...listInfo.data, count: 0, createdAt: FieldValue.serverTimestamp() });
         });
-    };
+        isSeedingPerformed = true;
+    }
 
-    if (snapshot.empty) {
-        const batch = adminDb.batch();
+    // 2. Seed Default User List and Contact
+    const userListsExist = listsSnapshot.docs.some(doc => !doc.data().isSystemList);
+    let testingListId: string | undefined = listsSnapshot.docs.find(doc => doc.data().name === "Testing")?.id;
 
-        // System Lists
-        batch.set(listsCollection.doc('all'), { name: 'All Contacts', count: 1, createdAt: FieldValue.serverTimestamp(), isSystemList: true, isMasterList: true });
-        batch.set(listsCollection.doc('unsubscribes'), { name: 'Unsubscribes', count: 0, createdAt: FieldValue.serverTimestamp(), isSystemList: true });
-        batch.set(listsCollection.doc('bounces'), { name: 'Bounces', count: 0, createdAt: FieldValue.serverTimestamp(), isSystemList: true });
-
-        // Default User List
+    if (!userListsExist) {
         const testingListRef = listsCollection.doc();
-        batch.set(testingListRef, { name: 'Testing', count: 1, createdAt: FieldValue.serverTimestamp(), isSystemList: false });
+        testingListId = testingListRef.id;
+        batch.set(testingListRef, { name: 'Testing', count: 0, createdAt: FieldValue.serverTimestamp(), isSystemList: false });
+        isSeedingPerformed = true;
+    }
+    
+    // Commit any list creations before checking contacts
+    if (isSeedingPerformed && systemListsToCreate.length > 0 || !userListsExist) {
+        await batch.commit();
+    }
 
-        // Default Contact
-        const contactRef = adminDb.collection('contacts').doc();
-        batch.set(contactRef, {
+    const contactsSnapshot = await contactsCollection.limit(1).get();
+    if (contactsSnapshot.empty && testingListId) {
+        const contactRef = contactsCollection.doc();
+        await contactRef.set({
             email: 'user@email.com',
             firstName: 'Test',
             lastName: 'User',
             status: 'Subscribed',
             subscribedAt: new Date().toISOString(),
-            listIds: ['all', testingListRef.id]
+            listIds: ['all', testingListId]
         });
-        
-        await batch.commit();
-
-        const newSnapshot = await listsCollection.get();
-        return sortLists(newSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as ContactList));
+        isSeedingPerformed = true;
     }
     
-    return sortLists(snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as ContactList));
+    // --- Data Fetching and Return ---
+    if (isSeedingPerformed) {
+        await updateAllListCounts(); // Ensure counts are correct after seeding
+        listsSnapshot = await listsCollection.get(); // Re-fetch all lists
+    }
+
+    const sortLists = (lists: ContactList[]) => {
+        const listOrder: Record<string, number> = { 'all': 1, 'unsubscribes': 2, 'bounces': 3 };
+        return lists.sort((a, b) => {
+            const aIsSystem = !!listOrder[a.id];
+            const bIsSystem = !!listOrder[b.id];
+            
+            if (aIsSystem && bIsSystem) return listOrder[a.id] - listOrder[b.id];
+            if (aIsSystem) return -1;
+            if (bIsSystem) return 1;
+
+            if (a.name === 'Testing') return -1;
+            if (b.name === 'Testing') return 1;
+            
+            return a.name.localeCompare(b.name);
+        });
+    };
+
+    const lists = listsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as ContactList);
+    return sortLists(lists);
 }
 
 export async function getContactListById(id: string): Promise<ContactList | null> {
