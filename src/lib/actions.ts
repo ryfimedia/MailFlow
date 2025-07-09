@@ -499,11 +499,15 @@ async function updateAllListCounts() {
 
 export async function getDashboardData() {
     const [campaignsSnapshot, allContactsListSnapshot] = await Promise.all([
-        adminDb.collection('campaigns').where('status', '==', 'Sent').orderBy('sentDate', 'desc').get(),
+        // The original query required a composite index. 
+        // This is more flexible and avoids the error, but may be less performant on very large datasets.
+        // For production, creating the Firestore index is the best practice.
+        adminDb.collection('campaigns').orderBy('createdAt', 'desc').get(),
         adminDb.collection('lists').doc('all').get()
     ]);
     
-    const sentCampaigns = campaignsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
+    const allCampaigns = campaignsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
+    const sentCampaigns = allCampaigns.filter(c => c.status === 'Sent');
     
     const totalSubscribers = (allContactsListSnapshot.data()?.count || 0) as number;
     let avgOpenRate = '0.0%';
@@ -520,31 +524,41 @@ export async function getDashboardData() {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const campaignsSentLast30Days = sentCampaigns.filter(c => c.sentDate && new Date(c.sentDate) > thirtyDaysAgo).length;
 
-    const recentCampaigns = (await adminDb.collection('campaigns').orderBy('createdAt', 'desc').limit(5).get()).docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
+    const recentCampaigns = allCampaigns.slice(0, 5);
 
     const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     const monthlyData: {[key: string]: { sent: number, opened: number }} = {};
     
     sentCampaigns.forEach(c => {
       if (c.sentDate) {
-        const month = new Date(c.sentDate).getMonth();
-        const monthName = monthNames[month];
-        if (!monthlyData[monthName]) {
-          monthlyData[monthName] = { sent: 0, opened: 0 };
+        const sentDate = new Date(c.sentDate);
+        const month = sentDate.getMonth();
+        const year = sentDate.getFullYear();
+        const key = `${year}-${month}`; // Use a unique key like YYYY-MM
+        if (!monthlyData[key]) {
+          monthlyData[key] = { sent: 0, opened: 0 };
         }
-        monthlyData[monthName].sent += 1;
+        monthlyData[key].sent += 1;
         // This is a mock calculation for opened
         if (Math.random() < parseFloat(c.openRate) / 100) {
-          monthlyData[monthName].opened += 1;
+          monthlyData[key].opened += 1;
         }
       }
     });
-
-    const chartData = monthNames.map(month => ({
-      month,
-      sent: monthlyData[month]?.sent || 0,
-      opened: monthlyData[month]?.opened || 0,
-    })).slice(0, 6);
+    
+    const chartData = [];
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const monthName = monthNames[d.getMonth()];
+        const key = `${d.getFullYear()}-${d.getMonth()}`;
+        
+        chartData.push({
+            month: monthName,
+            sent: monthlyData[key]?.sent || 0,
+            opened: monthlyData[key]?.opened || 0,
+        });
+    }
 
     return {
         totalSubscribers,
