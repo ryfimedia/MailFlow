@@ -1,6 +1,7 @@
 
 'use client';
 
+import React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,8 +16,11 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { useToast } from "@/hooks/use-toast";
 
-const campaigns = [
+const CAMPAIGNS_KEY = 'campaigns';
+
+const initialCampaigns = [
   {
     id: "1",
     name: "🚀 Q2 Product Launch",
@@ -24,6 +28,10 @@ const campaigns = [
     sentDate: "2023-06-15",
     openRate: "35.2%",
     clickRate: "5.8%",
+    recipients: 8500,
+    successfulDeliveries: 8495,
+    bounces: 5,
+    unsubscribes: 12,
   },
   {
     id: "2",
@@ -32,6 +40,10 @@ const campaigns = [
     sentDate: "2023-07-01",
     openRate: "28.9%",
     clickRate: "4.1%",
+    recipients: 12500,
+    successfulDeliveries: 12480,
+    bounces: 20,
+    unsubscribes: 25,
   },
   {
     id: "3",
@@ -56,16 +68,62 @@ const campaigns = [
     sentDate: "2023-08-10",
     openRate: "22.1%",
     clickRate: "3.5%",
+    recipients: 320,
+    successfulDeliveries: 320,
+    bounces: 0,
+    unsubscribes: 2,
   },
 ];
 
+type Campaign = typeof initialCampaigns[0];
+
 export default function CampaignsPage() {
   const router = useRouter();
+  const { toast } = useToast();
+  const [campaigns, setCampaigns] = React.useState<Campaign[]>([]);
 
-  const handleRowClick = (campaign: typeof campaigns[0]) => {
+  React.useEffect(() => {
+    try {
+      const storedCampaigns = localStorage.getItem(CAMPAIGNS_KEY);
+      if (storedCampaigns) {
+        setCampaigns(JSON.parse(storedCampaigns));
+      } else {
+        localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(initialCampaigns));
+        setCampaigns(initialCampaigns);
+      }
+    } catch (error) {
+      console.error("Failed to load campaigns from localStorage", error);
+      setCampaigns(initialCampaigns);
+    }
+  }, []);
+
+  const handleRowClick = (campaign: Campaign) => {
     if (campaign.status === "Sent") {
       router.push(`/campaigns/${campaign.id}`);
     }
+  };
+
+  const handleDuplicate = (campaignId: string) => {
+    const campaignToDuplicate = campaigns.find(c => c.id === campaignId);
+    if (!campaignToDuplicate) {
+        toast({ variant: 'destructive', title: 'Error', description: 'Campaign not found for duplication.' });
+        return;
+    }
+
+    const newCampaign = {
+        ...campaignToDuplicate,
+        id: new Date().getTime().toString(),
+        name: `Copy of ${campaignToDuplicate.name}`,
+        status: 'Draft',
+        sentDate: '-',
+        openRate: '-',
+        clickRate: '-',
+    };
+
+    const updatedCampaigns = [...campaigns, newCampaign];
+    setCampaigns(updatedCampaigns);
+    localStorage.setItem(CAMPAIGNS_KEY, JSON.stringify(updatedCampaigns));
+    toast({ title: 'Campaign Duplicated', description: `A new draft "${newCampaign.name}" has been created.` });
   };
 
   return (
@@ -115,7 +173,7 @@ export default function CampaignsPage() {
                       {campaign.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>{campaign.sentDate !== '-' ? new Date(campaign.sentDate).toLocaleDateString('en-US') : '-'}</TableCell>
+                  <TableCell>{campaign.sentDate !== '-' ? new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'}</TableCell>
                   <TableCell>{campaign.openRate}</TableCell>
                   <TableCell>{campaign.clickRate}</TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
@@ -128,8 +186,10 @@ export default function CampaignsPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuItem disabled={campaign.status === 'Sent'}>Edit</DropdownMenuItem>
-                        <DropdownMenuItem>Duplicate</DropdownMenuItem>
+                        <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild disabled={campaign.status === 'Sent'}>
+                           <Link href={campaign.status !== 'Sent' ? `/campaigns/new?id=${campaign.id}` : '#'}>Edit</Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onSelect={() => handleDuplicate(campaign.id)}>Duplicate</DropdownMenuItem>
                         <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
