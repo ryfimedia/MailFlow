@@ -189,14 +189,14 @@ export default function NewCampaignPage() {
     }
   }, [emailBodyValue]);
 
-  const updateFormBody = () => {
+  const updateFormBody = React.useCallback(() => {
     if (editorRef.current) {
         form.setValue("emailBody", editorRef.current.innerHTML, {
             shouldValidate: true,
             shouldDirty: true,
         });
     }
-  };
+  }, [form]);
 
   const applyFormat = (command: string, value?: string) => {
     if (editorRef.current) {
@@ -257,33 +257,58 @@ export default function NewCampaignPage() {
 
   const handleSaveBlockStyles = () => {
     const border = `${blockBorderWidth}px ${blockBorderStyle} ${blockBorderColor}`;
+    let blockToUpdate: HTMLElement | null = null;
 
+    // First, check if an element was directly clicked and selected
     if (selectedElement && selectedElement.dataset.styledBlock) {
-      const block = selectedElement;
-      block.style.backgroundColor = blockBgColor;
-      block.style.padding = `${blockPadding}px`;
-      block.style.border = border;
+        blockToUpdate = selectedElement;
     } else {
-      const selection = window.getSelection();
-      if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
-          toast({ variant: "destructive", title: "Selection required", description: "Please select text to apply block styles."});
-          return;
-      };
-      
-      const range = selection.getRangeAt(0);
-      const selectedContent = range.extractContents();
-      
-      const wrapper = document.createElement('div');
-      wrapper.dataset.styledBlock = "true";
-      wrapper.style.backgroundColor = blockBgColor;
-      wrapper.style.padding = `${blockPadding}px`;
-      wrapper.style.border = border;
-      wrapper.style.borderRadius = '8px';
-      wrapper.style.margin = '16px 0';
-      wrapper.appendChild(selectedContent);
+        // If not, check if the current text selection is inside an existing block
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const container = range.commonAncestorContainer;
+            const parentElement = container.nodeType === Node.ELEMENT_NODE 
+                ? (container as HTMLElement) 
+                : container.parentElement;
+            
+            if (parentElement) {
+                const existingBlock = parentElement.closest<HTMLElement>('[data-styled-block="true"]');
+                if (existingBlock) {
+                    blockToUpdate = existingBlock;
+                }
+            }
+        }
+    }
 
-      range.insertNode(wrapper);
-      selection.removeAllRanges();
+    if (blockToUpdate) {
+        // If we found a block to update, apply new styles to it
+        blockToUpdate.style.backgroundColor = blockBgColor;
+        blockToUpdate.style.padding = `${blockPadding}px`;
+        blockToUpdate.style.border = border;
+        blockToUpdate.style.borderRadius = '8px'; // Keep border radius consistent
+    } else {
+        // Otherwise, create a new block around the selected text
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+            toast({ variant: "destructive", title: "Selection required", description: "Please select text to wrap in a block."});
+            return;
+        }
+        
+        const range = selection.getRangeAt(0);
+        const selectedContent = range.extractContents();
+        
+        const wrapper = document.createElement('div');
+        wrapper.dataset.styledBlock = "true";
+        wrapper.style.backgroundColor = blockBgColor;
+        wrapper.style.padding = `${blockPadding}px`;
+        wrapper.style.border = border;
+        wrapper.style.borderRadius = '8px';
+        wrapper.style.margin = '16px 0';
+        wrapper.appendChild(selectedContent);
+
+        range.insertNode(wrapper);
+        selection.removeAllRanges();
     }
     
     updateFormBody();
@@ -729,7 +754,7 @@ export default function NewCampaignPage() {
                             <div
                                 ref={editorRef}
                                 contentEditable={true}
-                                onInput={(e) => field.onChange(e.currentTarget.innerHTML)}
+                                onInput={updateFormBody}
                                 onClick={handleEditorClick}
                                 className="email-editor min-h-[400px] w-full rounded-b-md border-0 p-4 text-base ring-offset-background text-black placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
