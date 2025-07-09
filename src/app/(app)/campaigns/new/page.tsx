@@ -31,6 +31,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
+import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
 
 // Mock data, in a real app this would come from an API
 const contactLists = [
@@ -231,9 +233,17 @@ export default function NewCampaignPage() {
                                     <PopoverTrigger asChild>
                                         <Button variant="outline" size="icon" type="button" title="Text Color" className="h-8 w-8"><Palette className="h-4 w-4" /></Button>
                                     </PopoverTrigger>
-                                    <PopoverContent align="start" className="w-auto p-1">
-                                        <div className="grid grid-cols-5 gap-1">
-                                            {colors.map(color => <Button key={color} style={{backgroundColor: color}} className="h-6 w-6 rounded-sm p-0 border hover:opacity-80"></Button>)}
+                                    <PopoverContent align="start" className="w-auto p-2">
+                                        <div className="space-y-2">
+                                            <p className="text-xs font-medium text-muted-foreground">Swatches</p>
+                                            <div className="grid grid-cols-5 gap-1">
+                                                {colors.map(color => <Button key={color} style={{backgroundColor: color}} className="h-6 w-6 rounded-sm p-0 border hover:opacity-80" title={color}></Button>)}
+                                            </div>
+                                            <Separator />
+                                            <div className="flex items-center gap-2 pt-1">
+                                                <Label htmlFor="color-picker" className="text-xs font-medium flex-1">Custom</Label>
+                                                <Input id="color-picker" type="color" className="h-8 w-8 p-0 border-none" defaultValue="#000000" />
+                                            </div>
                                         </div>
                                     </PopoverContent>
                                 </Popover>
