@@ -145,6 +145,45 @@ function rgbToHex(rgb: string): string {
   return "#" + r + g + b;
 }
 
+const optimizeImageForEmail = (file: File, maxWidth = 1080, maxHeight = 1920, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (!event.target?.result) return reject(new Error("Could not read file."));
+
+            const img = new Image();
+            img.onload = () => {
+                let { width, height } = img;
+
+                if (width > maxWidth || height > maxHeight) {
+                    const widthRatio = maxWidth / width;
+                    const heightRatio = maxHeight / height;
+                    const ratio = Math.min(widthRatio, heightRatio);
+                    width = Math.round(width * ratio);
+                    height = Math.round(height * ratio);
+                }
+
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return reject(new Error("Could not get canvas context."));
+                
+                ctx.drawImage(img, 0, 0, width, height);
+                
+                const outputFormat = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
+                const dataUrl = canvas.toDataURL(outputFormat, quality);
+                resolve(dataUrl);
+            };
+            img.onerror = (err) => reject(err);
+            img.src = event.target.result as string;
+        };
+        reader.onerror = (err) => reject(err);
+        reader.readAsDataURL(file);
+    });
+};
+
+
 export default function NewCampaignPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -300,18 +339,25 @@ export default function NewCampaignPage() {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.onchange = (e) => {
+    input.onchange = async (e) => {
       const target = e.target as HTMLInputElement;
       if (target.files && target.files.length > 0) {
         const file = target.files[0];
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const dataUrl = event.target?.result;
-          if (dataUrl) {
-            applyFormat('insertImage', dataUrl as string);
-          }
-        };
-        reader.readAsDataURL(file);
+        try {
+          toast({
+            title: "Optimizing image...",
+            description: "Your image is being resized and compressed for email.",
+          });
+          const optimizedDataUrl = await optimizeImageForEmail(file);
+          applyFormat('insertImage', optimizedDataUrl);
+        } catch (error) {
+          console.error("Image optimization failed:", error);
+          toast({
+            variant: "destructive",
+            title: "Image Error",
+            description: "Could not process the image. Please try a different one.",
+          });
+        }
       }
     };
     input.click();
