@@ -1,4 +1,5 @@
 
+
 export type Campaign = {
     id: string;
     name: string;
@@ -49,6 +50,7 @@ export type Template = {
 };
 
 export type Settings = {
+    draftCampaignSeeded?: boolean;
     templatesSeeded?: boolean;
     profile?: {
         companyName: string;

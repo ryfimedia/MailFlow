@@ -30,8 +30,45 @@ function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
 // ==== CAMPAIGNS ====
 
 export async function getCampaigns(): Promise<Campaign[]> {
-    const snapshot = await adminDb.collection('campaigns').orderBy('createdAt', 'desc').get();
-    return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
+    const campaignsCollection = adminDb.collection('campaigns');
+    const settingsRef = adminDb.collection('meta').doc('settings');
+
+    const [campaignsSnapshot, settingsDoc] = await Promise.all([
+        campaignsCollection.orderBy('createdAt', 'desc').get(),
+        settingsRef.get()
+    ]);
+    
+    const settings = settingsDoc.data() || {};
+
+    if (!settings.draftCampaignSeeded) {
+        const welcomeTemplate = defaultTemplates.find(t => t.name === 'Welcome Email');
+        
+        if (welcomeTemplate) {
+             const batch = adminDb.batch();
+             const newCampaignRef = campaignsCollection.doc();
+             
+             batch.set(newCampaignRef, {
+                name: 'Welcome Your New Subscribers',
+                subject: 'A Warm Welcome From Our Team! 👋',
+                status: 'Draft',
+                emailBody: welcomeTemplate.content,
+                openRate: '-',
+                clickRate: '-',
+                createdAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+             });
+             
+             batch.set(settingsRef, { draftCampaignSeeded: true }, { merge: true });
+             
+             await batch.commit();
+
+             // Re-fetch campaigns to include the new one.
+             const newCampaignsSnapshot = await campaignsCollection.orderBy('createdAt', 'desc').get();
+             return newCampaignsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
+        }
+    }
+
+    return campaignsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
 }
 
 export async function getCampaignById(id: string): Promise<Campaign | null> {
@@ -66,13 +103,12 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     }
 
     // Add footer
-    const companyName = settings.profile?.companyName || 'RyFi Media LLC';
-    const companyAddress = settings.profile?.address || 'PO Box 157, Colton, OR 97017';
+    const companyName = settings.profile?.companyName || 'Your Company Name';
+    const companyAddress = settings.profile?.address || 'Your Physical Address';
     const footer = `
         <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
             <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
             <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-            <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
             <p style="margin: 0;">
                 <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
                 <span style="padding: 0 5px;">|</span>
@@ -275,6 +311,7 @@ export async function getContactLists(): Promise<ContactList[]> {
     // Commit any list creations before checking contacts
     if (isSeedingPerformed && systemListsToCreate.length > 0 || !userListsExist) {
         await batch.commit();
+        isSeedingPerformed = false; // Reset for next check
     }
 
     const contactsSnapshot = await contactsCollection.limit(1).get();
@@ -294,8 +331,9 @@ export async function getContactLists(): Promise<ContactList[]> {
     // --- Data Fetching and Return ---
     if (isSeedingPerformed) {
         await updateAllListCounts(); // Ensure counts are correct after seeding
-        listsSnapshot = await listsCollection.get(); // Re-fetch all lists
     }
+
+    listsSnapshot = await listsCollection.get(); // Re-fetch all lists
 
     const sortLists = (lists: ContactList[]) => {
         const listOrder: Record<string, number> = { 'all': 1, 'unsubscribes': 2, 'bounces': 3 };
@@ -551,11 +589,12 @@ export async function getDashboardData() {
         if (!monthlyData[key]) {
           monthlyData[key] = { sent: 0, opened: 0 };
         }
+        //This logic is flawed, as it increments sent for every recipient
+        // monthlyData[key].sent += (c.recipients || 0);
         monthlyData[key].sent += 1;
         // This is a mock calculation for opened
-        if (Math.random() < parseFloat(c.openRate) / 100) {
-          monthlyData[key].opened += 1;
-        }
+        const openedCount = Math.round((c.recipients || 0) * (parseFloat(c.openRate) / 100));
+        monthlyData[key].opened += openedCount;
       }
     });
     

@@ -155,8 +155,8 @@ export default function CampaignsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onSelect={(e) => e.preventDefault()} asChild>
-                             <Link href={`/campaigns/new?id=${campaign.id}`}>Edit</Link>
+                          <DropdownMenuItem onSelect={() => router.push(`/campaigns/new?id=${campaign.id}`)}>
+                            Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => handleDuplicate(campaign.id)}>Duplicate</DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => handleDelete(campaign.id)} className="text-destructive">Delete</DropdownMenuItem>
