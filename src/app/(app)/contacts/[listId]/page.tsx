@@ -50,6 +50,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Mock data and types - in a real app, these would be defined in a shared types file
 type Contact = {
@@ -90,6 +91,7 @@ const EditContactFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email." }),
   phone: z.string().optional(),
   company: z.string().optional(),
+  status: z.enum(['Subscribed', 'Unsubscribed', 'Bounced']),
 });
 
 type EditContactFormValues = z.infer<typeof EditContactFormSchema>;
@@ -159,6 +161,7 @@ export default function ContactListPage() {
                 email: selectedContact.email,
                 phone: selectedContact.phone || '',
                 company: selectedContact.company || '',
+                status: selectedContact.status,
             });
         }
     }, [selectedContact, form]);
@@ -170,26 +173,74 @@ export default function ContactListPage() {
 
     const handleEditSubmit = (values: EditContactFormValues) => {
         if (!selectedContact) return;
-        
-        const updatedContacts = contacts.map(c => 
-            c.id === selectedContact.id ? { ...c, ...values } : c
-        );
-        setContacts(updatedContacts);
+
+        const oldStatus = selectedContact.status;
+        const newStatus = values.status;
+        const updatedContactData = { ...selectedContact, ...values };
 
         try {
-            const storedContactsByList = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
-            storedContactsByList[listId] = updatedContacts;
-            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(storedContactsByList));
+            const allListsData: ContactList[] = JSON.parse(localStorage.getItem(CONTACT_LISTS_KEY) || '[]');
+            const contactsByListData = JSON.parse(localStorage.getItem(CONTACTS_BY_LIST_KEY) || '{}');
+
+            // Just update fields, no status change
+            if (oldStatus === newStatus) {
+                const updatedContactsForList = contacts.map(c => 
+                    c.id === selectedContact.id ? updatedContactData : c
+                );
+                setContacts(updatedContactsForList);
+                contactsByListData[listId] = updatedContactsForList;
+            } else { // Status has changed, handle list transitions
+                // Case 1: Becoming Unsubscribed
+                if (newStatus === 'Unsubscribed') {
+                    // Remove from all non-system lists
+                    allListsData.forEach(l => {
+                        if (!l.isSystemList && contactsByListData[l.id]) {
+                            contactsByListData[l.id] = contactsByListData[l.id].filter((c: Contact) => c.id !== selectedContact.id);
+                        }
+                    });
+                    // Add to 'unsubscribes' list
+                    const unsubList = contactsByListData['unsubscribes'] || [];
+                    if (!unsubList.some((c: Contact) => c.id === selectedContact.id)) {
+                        unsubList.push(updatedContactData);
+                        contactsByListData['unsubscribes'] = unsubList;
+                    }
+                } 
+                // Case 2: Becoming Subscribed again
+                else if (newStatus === 'Subscribed' && oldStatus !== 'Subscribed') {
+                     // Remove from old system list (e.g., 'unsubscribes' or 'bounces')
+                    if (contactsByListData[oldStatus.toLowerCase()]) {
+                        contactsByListData[oldStatus.toLowerCase()] = contactsByListData[oldStatus.toLowerCase()].filter((c: Contact) => c.id !== selectedContact.id);
+                    }
+                    // Add to 'all' master list
+                    const allList = contactsByListData['all'] || [];
+                    if (!allList.some((c: Contact) => c.id === selectedContact.id)) {
+                         allList.push(updatedContactData);
+                         contactsByListData['all'] = allList;
+                    }
+                }
+                
+                // Refresh current page's contact list
+                setContacts(contacts.filter(c => c.id !== selectedContact.id));
+            }
+            
+            // Recalculate all list counts and save
+            const updatedLists = allListsData.map(l => ({
+                ...l,
+                count: (contactsByListData[l.id] || []).length,
+            }));
+
+            localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
+            localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByListData));
+            setAllLists(updatedLists); // Update all lists state as counts changed
+
+            toast({ title: "Contact Updated", description: `${values.firstName} ${values.lastName}'s details have been saved.`});
+            setIsEditDialogOpen(false);
+            setSelectedContact(null);
+
         } catch (error) {
             console.error("Failed to save updated contact:", error);
+            toast({ variant: 'destructive', title: "An error occurred" });
         }
-
-        toast({
-            title: "Contact Updated",
-            description: `${values.firstName} ${values.lastName}'s details have been saved.`,
-        });
-        setIsEditDialogOpen(false);
-        setSelectedContact(null);
     };
 
     const handleRemoveFromList = (contactId: string, contactName: string) => {
@@ -465,10 +516,10 @@ export default function ContactListPage() {
                                             {visibleColumns.company && <TableCell>{contact.company}</TableCell>}
                                             {visibleColumns.status &&
                                                 <TableCell>
-                                                    <Badge variant={contact.status === 'Subscribed' ? 'secondary' : 'outline'}>{contact.status}</Badge>
+                                                    <Badge variant={contact.status === 'Subscribed' ? 'default' : (contact.status === 'Unsubscribed' ? 'destructive' : 'secondary')}>{contact.status}</Badge>
                                                 </TableCell>
                                             }
-                                            {visibleColumns.subscribedAt && <TableCell>{new Date(contact.subscribedAt).toLocaleDateString('en-US')}</TableCell>}
+                                            {visibleColumns.subscribedAt && <TableCell>{new Date(contact.subscribedAt).toLocaleDateString('en-US', { timeZone: 'UTC' })}</TableCell>}
                                             {!list.isSystemList && (
                                                 <TableCell>
                                                     <DropdownMenu>
@@ -584,6 +635,28 @@ export default function ContactListPage() {
                                             <FormControl>
                                                 <Input placeholder="Acme Inc." {...field} />
                                             </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="status"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Status</FormLabel>
+                                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                                <FormControl>
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select a status" />
+                                                </SelectTrigger>
+                                                </FormControl>
+                                                <SelectContent>
+                                                    <SelectItem value="Subscribed">Subscribed</SelectItem>
+                                                    <SelectItem value="Unsubscribed">Unsubscribed</SelectItem>
+                                                    <SelectItem value="Bounced">Bounced</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                             <FormMessage />
                                         </FormItem>
                                     )}

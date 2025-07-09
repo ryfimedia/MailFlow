@@ -417,7 +417,11 @@ export default function NewCampaignPage() {
               <p style="margin: 0 0 5px 0;">Copyright 2025 ${companyName}, All rights reserved.</p>
               <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
               <p style="margin: 0 0 10px 0;">You have been sent this business email communication because you are listed as a professional real estate broker, agent or property manager in our area.</p>
-              <a href="#unsubscribe" style="color: #888888; text-decoration: underline;">Click HERE to unsubscribe from future emails.</a>
+              <p style="margin: 0;">
+                <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+                <span style="padding: 0 5px;">|</span>
+                <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
+              </p>
             </div>
         `;
         finalEmailBody += footer;

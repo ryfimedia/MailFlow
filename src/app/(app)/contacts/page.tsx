@@ -277,7 +277,7 @@ export default function ContactsPage() {
                     targetListId = uploadTargetListId;
                     const listInfo = allListsData.find(l => l.id === targetListId);
                     if (!listInfo) {
-                       toast({ variant: 'destructive', title: "Error", description: "Target list not found." });
+                       toast({ variant: "destructive", title: "Error", description: "Target list not found." });
                        return;
                     }
                     targetListName = listInfo.name;
@@ -334,10 +334,22 @@ export default function ContactsPage() {
                 localStorage.setItem(CONTACTS_BY_LIST_KEY, JSON.stringify(contactsByList));
                 localStorage.setItem(CONTACT_LISTS_KEY, JSON.stringify(updatedLists));
                 setLists(updatedLists);
+                
+                const mappedHeaders = new Set(Object.values(columnMapping).filter(Boolean));
+                const allCsvHeaders = new Set(csvHeaders);
+                const ignoredHeaders = [...allCsvHeaders].filter(h => !mappedHeaders.has(h));
 
+                let toastDescription = `${newContactsAddedCount} contacts added to "${targetListName}".`;
+                if (duplicatesSkippedCount > 0) {
+                    toastDescription += ` ${duplicatesSkippedCount} duplicates were skipped.`;
+                }
+                if (ignoredHeaders.length > 0) {
+                    toastDescription += ` Ignored columns: ${ignoredHeaders.join(', ')}.`;
+                }
+                
                 toast({
                     title: "Import Complete!",
-                    description: `${newContactsAddedCount} contacts added to "${targetListName}". ${duplicatesSkippedCount > 0 ? `${duplicatesSkippedCount} duplicates were skipped.` : ''}`,
+                    description: toastDescription,
                 });
 
                 const fileInput = document.getElementById('dropzone-file') as HTMLInputElement;
