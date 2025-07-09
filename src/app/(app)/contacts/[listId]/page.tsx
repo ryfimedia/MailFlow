@@ -23,6 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getContactListById, getContactsByListId, getContactLists, updateContact, removeContactsFromList, addContactsToLists } from "@/lib/actions";
 import type { Contact, ContactList } from "@/lib/types";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const columnConfig = [
     { id: 'firstName', label: 'First Name' },
