@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 export const metadata: Metadata = {
-  title: 'Ryfi MailFlow',
+  title: 'RyFi MailFlow',
   description: 'Smarter email marketing for better results.',
 };
 

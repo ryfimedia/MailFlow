@@ -74,7 +74,7 @@ export default function AppLayout({
                 <Rocket className="w-6 h-6" />
               </div>
               <h1 className="text-xl font-bold font-headline text-foreground">
-                Ryfi MailFlow
+                RyFi MailFlow
               </h1>
             </Link>
           </SidebarHeader>
