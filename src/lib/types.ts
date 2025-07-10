@@ -22,6 +22,22 @@ export type Campaign = {
     updatedAt: string;
 };
 
+export type DripCampaignEmail = {
+  subject: string;
+  body: string;
+  delayDays: number;
+};
+
+export type DripCampaign = {
+  id: string;
+  name: string;
+  contactListId: string;
+  status: 'Active' | 'Paused' | 'Draft';
+  emails: DripCampaignEmail[];
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type Contact = {
     id: string;
     firstName: string;

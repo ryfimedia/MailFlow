@@ -1,6 +1,7 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { Resend } from "resend";
 
 admin.initializeApp();
 
@@ -78,5 +79,113 @@ export const cleanupUnusedImages = functions.pubsub
     }
     
     functions.logger.log(`Cleanup complete. Deleted ${deletedCount} unused images.`);
+    return null;
+  });
+
+/**
+ * This function runs once a day to process active drip campaigns.
+ * It checks each subscribed contact against each campaign's email sequence
+ * and sends the appropriate email based on the number of days since they subscribed.
+ */
+export const processDripCampaigns = functions.pubsub
+  .schedule("every 24 hours")
+  .onRun(async (context) => {
+    functions.logger.log("Starting drip campaign processing task.");
+
+    const resend = new Resend("re_34YxtLPC_FgqsgMFpsLpToFbWettkYyxy");
+    const settingsDoc = await db.collection("meta").doc("settings").get();
+    const settings = settingsDoc.data() || {};
+    
+    const fromName = settings.defaults?.fromName || "Your Company";
+    const fromEmail = settings.defaults?.fromEmail || "noreply@yourdomain.com";
+    const companyName = settings.profile?.companyName || "Your Company Name";
+    const companyAddress = settings.profile?.address || "Your Physical Address";
+
+    const footer = `
+        <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+            <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+            <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+            <p style="margin: 0;">
+                <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+                <span style="padding: 0 5px;">|</span>
+                <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
+            </p>
+        </div>
+    `;
+
+    const activeDripCampaigns = await db
+      .collection("dripCampaigns")
+      .where("status", "==", "Active")
+      .get();
+
+    if (activeDripCampaigns.empty) {
+      functions.logger.log("No active drip campaigns found.");
+      return null;
+    }
+
+    for (const campaignDoc of activeDripCampaigns.docs) {
+      const campaign = campaignDoc.data();
+      const campaignName = campaign.name;
+      const listId = campaign.contactListId;
+      const emails = campaign.emails || [];
+
+      if (!listId || emails.length === 0) {
+        functions.logger.warn(`Campaign "${campaignName}" (ID: ${campaignDoc.id}) is invalid or has no emails, skipping.`);
+        continue;
+      }
+      
+      functions.logger.log(`Processing campaign: "${campaignName}" for list ID: ${listId}`);
+
+      const contactsSnapshot = await db
+        .collection("contacts")
+        .where("listIds", "array-contains", listId)
+        .where("status", "==", "Subscribed")
+        .get();
+
+      if (contactsSnapshot.empty) {
+        functions.logger.log(`No subscribed contacts found for list ${listId} in campaign "${campaignName}".`);
+        continue;
+      }
+
+      for (const contactDoc of contactsSnapshot.docs) {
+        const contact = contactDoc.data();
+        
+        try {
+          const subscribedDate = new Date(contact.subscribedAt);
+          subscribedDate.setUTCHours(0, 0, 0, 0);
+          
+          const today = new Date();
+          today.setUTCHours(0, 0, 0, 0);
+          
+          const timeDiff = today.getTime() - subscribedDate.getTime();
+          const daysSinceSubscription = Math.round(timeDiff / (1000 * 60 * 60 * 24));
+
+          const emailToSend = emails.find((e: any) => e.delayDays === daysSinceSubscription);
+
+          if (emailToSend) {
+            functions.logger.log(`Matched day ${daysSinceSubscription} for ${contact.email} in campaign "${campaignName}". Preparing to send.`);
+            
+            let personalizedBody = emailToSend.body
+              .replace(/\[FirstName\]/g, contact.firstName || '')
+              .replace(/\[LastName\]/g, contact.lastName || '')
+              .replace(/\[Email\]/g, contact.email || '');
+
+            const fullHtml = personalizedBody + footer;
+
+            await resend.emails.send({
+              from: `${fromName} <${fromEmail}>`,
+              to: contact.email,
+              subject: emailToSend.subject,
+              html: fullHtml,
+            });
+            functions.logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
+          }
+        } catch (error) {
+          functions.logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error);
+        }
+      }
+    }
+    
+    functions.logger.log("Drip campaign processing finished.");
     return null;
   });

@@ -4,12 +4,13 @@
 import { adminDb } from './firebase-admin';
 import { z } from 'zod';
 import { Resend } from 'resend';
-import type { Campaign, Contact, ContactList, Settings, Template, MediaImage } from './types';
+import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
 import { getStorage } from 'firebase-admin/storage';
 
 const FREE_TIER_DAILY_LIMIT = 100;
+const RESEND_API_KEY = "re_34YxtLPC_FgqsgMFpsLpToFbWettkYyxy";
 
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
     if (!doc.exists) return null;
@@ -99,7 +100,7 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
       return { error: 'Your account setup is incomplete. Please configure your profile and sending email settings before sending.' };
     }
     
-    const resend = new Resend('re_34YxtLPC_FgqsgMFpsLpToFbWettkYyxy');
+    const resend = new Resend(RESEND_API_KEY);
 
     const allContactsInList = await getContactsByListId(campaignData.recipientListId!);
     const contacts = (tags && tags.length > 0)
@@ -220,6 +221,42 @@ export async function duplicateCampaign(id: string): Promise<Campaign | null> {
 export async function deleteCampaign(id: string) {
     await adminDb.collection('campaigns').doc(id).delete();
 }
+
+// ==== DRIP CAMPAIGNS ====
+
+export async function getDripCampaigns(): Promise<DripCampaign[]> {
+    const snapshot = await adminDb.collection('dripCampaigns').orderBy('createdAt', 'desc').get();
+    return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as DripCampaign);
+}
+
+export async function getDripCampaignById(id: string): Promise<DripCampaign | null> {
+    const doc = await adminDb.collection('dripCampaigns').doc(id).get();
+    return docWithIdAndTimestamps(doc) as DripCampaign | null;
+}
+
+export async function saveDripCampaign(data: Partial<DripCampaign> & { id?: string | null }) {
+    const { id, ...dripData } = data;
+    
+    if (id) {
+        await adminDb.collection('dripCampaigns').doc(id).set({
+            ...dripData,
+            updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        return { id };
+    } else {
+        const newDocRef = await adminDb.collection('dripCampaigns').add({
+            ...dripData,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+        });
+        return { id: newDocRef.id };
+    }
+}
+
+export async function deleteDripCampaign(id: string) {
+    await adminDb.collection('dripCampaigns').doc(id).delete();
+}
+
 
 // ==== TEMPLATES ====
 
@@ -540,19 +577,19 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(formName: 'profile' | 'defaults', data: any) {
     const settingsDocRef = adminDb.collection('meta').doc('settings');
+    let updateData: Record<string, any> = {};
 
     if (formName === 'profile') {
-        await settingsDocRef.update({
-            'profile.companyName': data.companyName,
-            'profile.address': data.address,
-            'defaults.fromName': data.fromName,
-        });
+        updateData['profile.companyName'] = data.companyName;
+        updateData['profile.address'] = data.address;
+        updateData['defaults.fromName'] = data.fromName;
     } else if (formName === 'defaults') {
-        await settingsDocRef.update({
-            'defaults.fromEmail': data.fromEmail,
-        });
+        updateData['defaults.fromEmail'] = data.fromEmail;
     }
+
+    await settingsDocRef.set(updateData, { merge: true });
 }
+
 
 // ==== DASHBOARD & HELPERS ====
 

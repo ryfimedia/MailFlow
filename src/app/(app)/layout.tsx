@@ -24,6 +24,7 @@ import {
   PlusCircle,
   LayoutTemplate,
   Image,
+  Mailbox,
 } from "lucide-react";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -59,6 +60,7 @@ export default function AppLayout({
   const menuItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/campaigns", label: "Campaigns", icon: Mail },
+    { href: "/drip-campaigns", label: "Drip Campaigns", icon: Mailbox },
     { href: "/templates", label: "Templates", icon: LayoutTemplate },
     { href: "/contacts", label: "Contacts", icon: Users },
     { href: "/media", label: "Media Library", icon: Image },
