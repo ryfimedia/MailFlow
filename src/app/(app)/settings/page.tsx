@@ -45,11 +45,19 @@ export default function SettingsPage() {
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     mode: "onChange",
+    defaultValues: {
+      companyName: "",
+      address: "",
+      fromName: "",
+    },
   });
 
   const defaultsForm = useForm<DefaultsFormValues>({
     resolver: zodResolver(defaultsFormSchema),
     mode: "onChange",
+    defaultValues: {
+      fromEmail: "",
+    },
   });
 
   React.useEffect(() => {
@@ -184,7 +192,7 @@ export default function SettingsPage() {
                           <Input placeholder="hello@yourcompany.com" {...field} />
                         </FormControl>
                         <FormDescription>
-                            Your domain must be verified with Resend for emails to be delivered.
+                           This will be the default "from" email address for new campaigns.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
