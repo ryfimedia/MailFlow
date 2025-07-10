@@ -405,16 +405,15 @@ export async function getOptInForms(): Promise<OptInForm[]> {
 
 export async function getOptInFormById(id: string): Promise<OptInForm | null> {
     // Note: This action might be called by unauthenticated users from the public form page.
-    // We can't use getDb() here directly. Instead, we'll assume the form ID implies a user context
-    // but this part of the data model might need review for multi-tenant security.
-    // For now, we query across all users' forms. This is NOT secure for production.
-    const formsQuery = await admin.firestore().collectionGroup('optInForms').where('id', '==', id).limit(1).get();
-    if (formsQuery.empty) return null;
-    const doc = formsQuery.docs[0];
+    // It queries across all users' forms and finds the one with the matching ID.
+    const formsQuerySnapshot = await admin.firestore().collectionGroup('optInForms').get();
+    const formDoc = formsQuerySnapshot.docs.find(doc => doc.id === id);
+
+    if (!formDoc) return null;
     
-    const form = docWithIdAndTimestamps(doc) as OptInForm;
+    const form = docWithIdAndTimestamps(formDoc) as OptInForm;
     // We need to get the owner to find the contact list
-    const userId = doc.ref.parent.parent!.id;
+    const userId = formDoc.ref.parent.parent!.id;
     form.userId = userId;
 
     return form;
@@ -479,7 +478,7 @@ export async function addContactFromForm(data: { userId: string, formId: string,
 
     const newContactRef = await userDb.collection('contacts').add(newContact);
     
-    await updateAllListCounts();
+    await updateAllListCounts(userId);
 
     return { success: true, contactId: newContactRef.id };
 }
@@ -525,6 +524,8 @@ export async function getContactLists(): Promise<ContactList[]> {
         await batch.commit();
         isSeedingPerformed = false; 
     }
+    
+    const userId = (await getDb()).id;
 
     const contactsSnapshot = await contactsCollection.limit(1).get();
     if (contactsSnapshot.empty && testingListId) {
@@ -541,7 +542,7 @@ export async function getContactLists(): Promise<ContactList[]> {
     }
     
     if (isSeedingPerformed) {
-        await updateAllListCounts();
+        await updateAllListCounts(userId);
     }
 
     listsSnapshot = await listsCollection.get();
@@ -655,7 +656,7 @@ export async function updateContact(contactId: string, data: Partial<Contact>, c
         }
     }
     await batch.commit();
-    await updateAllListCounts();
+    await updateAllListCounts(userDb.id);
 }
 
 export async function removeContactsFromList(contactIds: string[], listId: string): Promise<void> {
@@ -666,7 +667,7 @@ export async function removeContactsFromList(contactIds: string[], listId: strin
         batch.update(contactRef, { listIds: FieldValue.arrayRemove(listId) });
     });
     await batch.commit();
-    await updateAllListCounts();
+    await updateAllListCounts(userDb.id);
 }
 
 export async function addContactsToLists(contactIds: string[], listIds: string[]): Promise<{ addedCount: number, targetListName: string}> {
@@ -677,7 +678,7 @@ export async function addContactsToLists(contactIds: string[], listIds: string[]
         batch.update(contactRef, { listIds: FieldValue.arrayUnion(...listIds) });
     });
     await batch.commit();
-    await updateAllListCounts();
+    await updateAllListCounts(userDb.id);
     
     const targetList = await getContactListById(listIds[0]);
     return { addedCount: contactIds.length, targetListName: targetList?.name || 'list' };
@@ -759,7 +760,7 @@ export async function importContacts(data: {
     });
 
     await batch.commit();
-    await updateAllListCounts();
+    await updateAllListCounts(userDb.id);
 
     return {
         newContactsAddedCount,
@@ -801,8 +802,8 @@ export async function saveSettings(data: Partial<Settings>) {
 
 // ==== DASHBOARD & HELPERS ====
 
-async function updateAllListCounts() {
-    const userDb = await getDb();
+async function updateAllListCounts(userId: string) {
+    const userDb = admin.firestore().collection('users').doc(userId);
     const listsSnapshot = await userDb.collection('lists').get();
     const batch = admin.firestore().batch();
 
@@ -981,13 +982,13 @@ export async function deleteMediaImage(fileName: string): Promise<{ success: boo
 
 export async function getUnsubscribeDetails(contactId: string, listId: string | null, all: boolean): Promise<{contactEmail: string, listName?: string, error?: string}> {
     // This is a public action and does not have user context.
-    // It needs to find the contact across all users. This is not secure for a real multi-tenant app.
-    const contactsQuery = await admin.firestore().collectionGroup('contacts').where('id', '==', contactId).limit(1).get();
-    if (contactsQuery.empty) {
+    const contactsQuerySnapshot = await admin.firestore().collectionGroup('contacts').get();
+    const contactDoc = contactsQuerySnapshot.docs.find(doc => doc.id === contactId);
+
+    if (!contactDoc) {
         return { error: 'This contact does not exist.', contactEmail: '' };
     }
-
-    const contactDoc = contactsQuery.docs[0];
+    
     const contact = contactDoc.data() as Contact;
     
     if (all || !listId) {
@@ -1009,11 +1010,13 @@ export async function getUnsubscribeDetails(contactId: string, listId: string | 
 
 export async function unsubscribeContact(contactId: string, listId: string | null, all: boolean): Promise<{success?: boolean, error?: string}> {
     // This is a public action and does not have user context.
-    const contactsQuery = await admin.firestore().collectionGroup('contacts').where('id', '==', contactId).limit(1).get();
-    if (contactsQuery.empty) {
+    const contactsQuerySnapshot = await admin.firestore().collectionGroup('contacts').get();
+    const contactDoc = contactsQuerySnapshot.docs.find(doc => doc.id === contactId);
+
+    if (!contactDoc) {
         return { error: 'Contact not found.' };
     }
-    const contactDoc = contactsQuery.docs[0];
+
     const contactRef = contactDoc.ref;
     const contactData = contactDoc.data() as Contact;
     
@@ -1037,16 +1040,7 @@ export async function unsubscribeContact(contactId: string, listId: string | nul
     await batch.commit();
     
     // Need to pass userId to update counts for the correct user
-    const userDb = admin.firestore().collection('users').doc(userId);
-    const listsSnapshot = await userDb.collection('lists').get();
-    const countBatch = admin.firestore().batch();
-
-    for (const listDoc of listsSnapshot.docs) {
-        const contactsCountSnapshot = await userDb.collection('contacts').where('listIds', 'array-contains', listDoc.id).count().get();
-        const count = contactsCountSnapshot.data().count;
-        countBatch.update(listDoc.ref, { count });
-    }
-    await countBatch.commit();
+    await updateAllListCounts(userId);
 
     return { success: true };
 }

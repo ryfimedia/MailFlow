@@ -2,9 +2,10 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
+import { onAuthStateChanged, User, signOut as firebaseSignOut, getIdToken } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import Cookies from 'js-cookie';
 
 interface AuthContextType {
   user: User | null;
@@ -18,11 +19,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
+      if (user) {
+        const token = await getIdToken(user);
+        Cookies.set('firebaseIdToken', token, { expires: 1, path: '/' });
+      } else {
+        Cookies.remove('firebaseIdToken');
+      }
       setLoading(false);
     });
 
