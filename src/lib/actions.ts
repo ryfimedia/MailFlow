@@ -10,7 +10,6 @@ import { defaultTemplates } from './default-templates';
 import { getStorage } from 'firebase-admin/storage';
 
 const FREE_TIER_DAILY_LIMIT = 100;
-const RESEND_API_KEY = "re_34YxtLPC_FgqsgMFpsLpToFbWettkYyxy";
 
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
     if (!doc.exists) return null;
@@ -100,7 +99,10 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
       return { error: 'Your account setup is incomplete. Please configure your profile and sending email settings before sending.' };
     }
     
-    const resend = new Resend(RESEND_API_KEY);
+    if (!process.env.RESEND_API_KEY) {
+        return { error: 'Resend API key is not configured in environment variables.' };
+    }
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
     const allContactsInList = await getContactsByListId(campaignData.recipientListId!);
     const contacts = (tags && tags.length > 0)

@@ -92,7 +92,13 @@ export const processDripCampaigns = functions.pubsub
   .onRun(async (context) => {
     functions.logger.log("Starting drip campaign processing task.");
 
-    const resend = new Resend("re_34YxtLPC_FgqsgMFpsLpToFbWettkYyxy");
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (!resendApiKey) {
+        functions.logger.error("Resend API key is not set in environment variables. Aborting drip campaign processing.");
+        return null;
+    }
+    const resend = new Resend(resendApiKey);
+
     const settingsDoc = await db.collection("meta").doc("settings").get();
     const settings = settingsDoc.data() || {};
     
