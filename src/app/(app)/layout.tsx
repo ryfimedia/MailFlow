@@ -24,7 +24,6 @@ import {
   Rocket,
   PlusCircle,
   LayoutTemplate,
-  Terminal,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
@@ -39,7 +38,6 @@ function SetupBanner() {
 
     return (
         <Alert className="m-4 mb-0 border-accent bg-accent/10 text-foreground rounded-lg">
-            <Terminal className="h-4 w-4" />
             <AlertTitle className="font-bold">Complete Your Account Setup!</AlertTitle>
             <AlertDescription>
                 You need to configure your settings before you can send emails. 
