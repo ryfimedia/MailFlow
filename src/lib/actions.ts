@@ -4,10 +4,9 @@
 import { z } from 'zod';
 import { Resend } from 'resend';
 import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign, OptInForm } from './types';
-import admin from 'firebase-admin';
+import admin from './firebase-admin'; // Use the initialized admin instance
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
-import './firebase-admin';
 
 const adminDb = admin.firestore();
 const adminStorage = admin.storage();

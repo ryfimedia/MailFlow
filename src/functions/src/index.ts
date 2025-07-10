@@ -132,6 +132,12 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
     }
     const resend = new Resend(resendApiKey);
 
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!baseUrl) {
+      logger.error("NEXT_PUBLIC_BASE_URL is not set in environment variables. Unsubscribe links will be incorrect.");
+      return null;
+    }
+
     const settingsDoc = await db.collection("meta").doc("settings").get();
     const settings = settingsDoc.data() || {};
     
@@ -197,8 +203,8 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
               .replace(/\[LastName\]/g, contact.lastName || '')
               .replace(/\[Email\]/g, contact.email || '');
 
-            const listUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
-            const allUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&all=true`;
+            const listUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
+            const allUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&all=true`;
                 
             const footer = `
                 <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
