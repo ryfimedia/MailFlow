@@ -24,6 +24,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { getSettings, saveSettings } from '@/lib/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSettings as useSettingsContext } from '@/contexts/settings-context';
+import type { Settings } from '@/lib/types';
 
 const profileFormSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters."),
@@ -73,15 +74,32 @@ export default function SettingsPage() {
     }
   }, [settings, profileForm, defaultsForm]);
   
-  const handleSave = async (formName: 'profile' | 'defaults', data: any) => {
+  const handleSave = async (formName: 'profile' | 'defaults') => {
+    let settingsToSave: Partial<Settings> = {};
+
+    // Get values from both forms to create a complete settings object
+    const profileValues = profileForm.getValues();
+    const defaultsValues = defaultsForm.getValues();
+
+    settingsToSave = {
+        profile: {
+            companyName: profileValues.companyName,
+            address: profileValues.address,
+        },
+        defaults: {
+            fromName: profileValues.fromName,
+            fromEmail: defaultsValues.fromEmail,
+        }
+    };
+    
     try {
-      await saveSettings(formName, data);
+      await saveSettings(settingsToSave);
       
       toast({
         title: "Settings Saved",
-        description: `Your ${formName} settings have been updated successfully.`,
+        description: "Your settings have been updated successfully.",
       });
-      reloadSettings();
+      await reloadSettings();
 
     } catch (error: any) {
        console.error("Failed to save settings:", error);
@@ -111,7 +129,7 @@ export default function SettingsPage() {
 
         <TabsContent value="profile">
           <Form {...profileForm}>
-            <form onSubmit={profileForm.handleSubmit(data => handleSave('profile', data))} className="space-y-8">
+            <form onSubmit={profileForm.handleSubmit(() => handleSave('profile'))} className="space-y-8">
               <Card>
                 <CardHeader>
                   <CardTitle>Company & Sender Profile</CardTitle>
@@ -173,7 +191,7 @@ export default function SettingsPage() {
 
         <TabsContent value="email">
            <Form {...defaultsForm}>
-            <form onSubmit={defaultsForm.handleSubmit(data => handleSave('defaults', data))} className="space-y-8">
+            <form onSubmit={defaultsForm.handleSubmit(() => handleSave('defaults'))} className="space-y-8">
               <Card>
                 <CardHeader>
                   <CardTitle>Sending Email Address</CardTitle>

@@ -577,19 +577,9 @@ export async function getSettings(): Promise<Settings> {
     return (docWithIdAndTimestamps(doc) as Settings) || {};
 }
 
-export async function saveSettings(formName: 'profile' | 'defaults', data: any) {
+export async function saveSettings(data: Partial<Settings>) {
     const settingsDocRef = adminDb.collection('meta').doc('settings');
-    let updateData: Record<string, any> = {};
-
-    if (formName === 'profile') {
-        updateData['profile.companyName'] = data.companyName;
-        updateData['profile.address'] = data.address;
-        updateData['defaults.fromName'] = data.fromName;
-    } else if (formName === 'defaults') {
-        updateData['defaults.fromEmail'] = data.fromEmail;
-    }
-
-    await settingsDocRef.set(updateData, { merge: true });
+    await settingsDocRef.set(data, { merge: true });
 }
 
 
