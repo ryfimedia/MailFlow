@@ -24,6 +24,7 @@ import {
   Rocket,
   PlusCircle,
   LayoutTemplate,
+  Image,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
@@ -62,6 +63,7 @@ export default function AppLayout({
     { href: "/campaigns", label: "Campaigns", icon: Mail },
     { href: "/templates", label: "Templates", icon: LayoutTemplate },
     { href: "/contacts", label: "Contacts", icon: Users },
+    { href: "/media", label: "Media Library", icon: Image },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 

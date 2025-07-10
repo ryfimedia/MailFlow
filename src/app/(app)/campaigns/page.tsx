@@ -130,7 +130,10 @@ export default function CampaignsPage() {
                     </TableCell>
                 </TableRow>
               ) : (
-                campaigns.map((campaign) => (
+                campaigns.map((campaign) => {
+                  const isArchived = campaign.status === 'Sent' && campaign.sentDate && (new Date().getTime() - new Date(campaign.sentDate).getTime()) > 365 * 24 * 60 * 60 * 1000;
+                  
+                  return (
                   <TableRow 
                     key={campaign.id} 
                     onClick={() => handleRowClick(campaign)}
@@ -138,9 +141,12 @@ export default function CampaignsPage() {
                   >
                     <TableCell className="font-medium">{campaign.name}</TableCell>
                     <TableCell>
-                      <Badge variant={getBadgeVariant(campaign.status)}>
-                        {campaign.status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={getBadgeVariant(campaign.status)}>
+                          {campaign.status}
+                        </Badge>
+                        {isArchived && <Badge variant="outline">Archived</Badge>}
+                      </div>
                     </TableCell>
                     <TableCell>{campaign.sentDate ? new Date(campaign.sentDate).toLocaleDateString('en-US', { timeZone: 'UTC' }) : '-'}</TableCell>
                     <TableCell>{campaign.openRate}</TableCell>
@@ -155,16 +161,28 @@ export default function CampaignsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onSelect={() => router.push(`/campaigns/new?id=${campaign.id}`)}>
-                            Edit
+                          {campaign.status === 'Sent' ? (
+                            <DropdownMenuItem onSelect={() => router.push(`/campaigns/${campaign.id}`)}>
+                              View Stats
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem onSelect={() => router.push(`/campaigns/new?id=${campaign.id}`)}>
+                              Edit
+                            </DropdownMenuItem>
+                          )}
+                          {!isArchived && (
+                            <DropdownMenuItem onSelect={() => handleDuplicate(campaign.id)}>
+                              Duplicate
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onSelect={() => handleDelete(campaign.id)} className="text-destructive">
+                            Delete
                           </DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => handleDuplicate(campaign.id)}>Duplicate</DropdownMenuItem>
-                          <DropdownMenuItem onSelect={() => handleDelete(campaign.id)} className="text-destructive">Delete</DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                )})
               )}
             </TableBody>
           </Table>

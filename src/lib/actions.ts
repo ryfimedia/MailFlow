@@ -4,7 +4,7 @@
 import { adminDb } from './firebase-admin';
 import { z } from 'zod';
 import { Resend } from 'resend';
-import type { Campaign, Contact, ContactList, Settings, Template } from './types';
+import type { Campaign, Contact, ContactList, Settings, Template, MediaImage } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
 import { getStorage } from 'firebase-admin/storage';
@@ -740,5 +740,49 @@ export async function uploadImage(formData: FormData): Promise<{ url?: string; e
     } catch (error: any) {
         console.error("Error uploading to Firebase Storage:", error);
         return { error: 'Failed to upload image. Make sure your Storage security rules allow public writes.' };
+    }
+}
+
+// ==== MEDIA ====
+export async function getMediaImages(): Promise<MediaImage[]> {
+    try {
+        const bucket = getStorage().bucket();
+        const [files] = await bucket.getFiles({ prefix: 'campaign-images/' });
+
+        if (files.length === 0) return [];
+        // The first file is often the directory itself, so filter it out.
+        const imageFiles = files.filter(file => !file.name.endsWith('/'));
+        
+        const mediaImages = await Promise.all(
+            imageFiles.map(async (file) => {
+                const [metadata] = await file.getMetadata();
+                return {
+                    name: file.name,
+                    url: file.publicUrl(),
+                    createdAt: metadata.timeCreated,
+                };
+            })
+        );
+        
+        // Sort by most recent
+        mediaImages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        
+        return mediaImages;
+    } catch (error) {
+        console.error("Error fetching media from Firebase Storage:", error);
+        // This can happen if Storage is not enabled or permissions are wrong.
+        // Return an empty array to avoid crashing the page.
+        return [];
+    }
+}
+
+export async function deleteMediaImage(fileName: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const bucket = getStorage().bucket();
+        await bucket.file(fileName).delete();
+        return { success: true };
+    } catch (error: any) {
+        console.error("Error deleting image from Firebase Storage:", error);
+        return { success: false, error: 'Failed to delete image.' };
     }
 }

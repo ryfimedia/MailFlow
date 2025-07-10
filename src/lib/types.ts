@@ -69,3 +69,9 @@ export type Settings = {
         resendApiKey: string;
     }
 }
+
+export type MediaImage = {
+    name: string;
+    url: string;
+    createdAt: string;
+};

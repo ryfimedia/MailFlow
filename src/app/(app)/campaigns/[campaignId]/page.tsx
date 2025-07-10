@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Users, MailOpen, MousePointerClick, TrendingUp, XCircle, Download } from "lucide-react";
+import { ArrowLeft, Users, MailOpen, MousePointerClick, TrendingUp, XCircle, Download, AlertCircle } from "lucide-react";
 import React from "react";
 import Papa from "papaparse";
 
@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Campaign } from "@/lib/types";
 import { getCampaignById } from "@/lib/actions";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 
 
 const StatCard = ({ title, value, icon: Icon, description }: { title: string, value: string | number, icon: React.ElementType, description?: string }) => (
@@ -119,8 +120,19 @@ export default function CampaignStatsPage() {
         )
     }
 
+    const isArchived = campaign && campaign.status === 'Sent' && campaign.sentDate && (new Date().getTime() - new Date(campaign.sentDate).getTime()) > 365 * 24 * 60 * 60 * 1000;
+
     return (
         <div className="space-y-6">
+             {isArchived && (
+                <Alert variant="default">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle className="font-bold">Archived Campaign</AlertTitle>
+                    <AlertDescription>
+                    This campaign is over a year old. Its content has been removed for data retention, but its statistics are still available.
+                    </AlertDescription>
+                </Alert>
+            )}
             <div className="flex items-center gap-4">
                 <Button asChild variant="outline" size="icon" className="h-8 w-8">
                     <Link href="/campaigns">
