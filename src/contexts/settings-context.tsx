@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -20,7 +21,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const isSetupComplete = React.useMemo(() => {
     if (!settings) return false;
     return !!(
-      settings.api?.resendApiKey &&
       settings.defaults?.fromEmail &&
       settings.defaults?.fromName &&
       settings.profile?.companyName &&

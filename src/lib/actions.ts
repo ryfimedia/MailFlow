@@ -90,17 +90,16 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
 
     const settings = await getSettings();
     const isSetupComplete = !!(
-      settings.api?.resendApiKey &&
       settings.defaults?.fromEmail &&
       settings.defaults?.fromName &&
       settings.profile?.companyName &&
       settings.profile?.address
     );
     if (!isSetupComplete) {
-      return { error: 'Your account setup is incomplete. Please configure your settings before sending.' };
+      return { error: 'Your account setup is incomplete. Please configure your profile and sending email settings before sending.' };
     }
     
-    const resend = new Resend(settings.api.resendApiKey);
+    const resend = new Resend('re_34YxtLPC_FgqsgMFpsLpToFbWettkYyxy');
 
     const allContactsInList = await getContactsByListId(campaignData.recipientListId!);
     const contacts = (tags && tags.length > 0)
@@ -539,20 +538,20 @@ export async function getSettings(): Promise<Settings> {
     return (docWithIdAndTimestamps(doc) as Settings) || {};
 }
 
-export async function saveSettings(formName: 'profile' | 'defaults' | 'api', data: any) {
+export async function saveSettings(formName: 'profile' | 'defaults', data: any) {
     const settingsDocRef = adminDb.collection('meta').doc('settings');
 
     if (formName === 'profile') {
-        await settingsDocRef.set({ profile: {
-            companyName: data.companyName,
-            address: data.address
-        }, defaults: {
-            fromName: data.fromName
-        }}, { merge: true });
-        return;
+        await settingsDocRef.update({
+            'profile.companyName': data.companyName,
+            'profile.address': data.address,
+            'defaults.fromName': data.fromName,
+        });
+    } else if (formName === 'defaults') {
+        await settingsDocRef.update({
+            'defaults.fromEmail': data.fromEmail,
+        });
     }
-    
-    await settingsDocRef.set({ [formName]: data }, { merge: true });
 }
 
 // ==== DASHBOARD & HELPERS ====

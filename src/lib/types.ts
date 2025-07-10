@@ -61,9 +61,6 @@ export type Settings = {
     defaults?: {
         fromName: string;
         fromEmail: string;
-    },
-    api?: {
-        resendApiKey: string;
     }
 }
 
