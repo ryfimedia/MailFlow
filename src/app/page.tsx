@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { Rocket, Mail, BarChart2, Zap, LogIn, LayoutDashboard, Loader2 } from 'lucide-react';
+import { Rocket, Mail, BarChart2, Zap, LayoutDashboard, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -228,4 +228,3 @@ export default function LandingPage() {
     </div>
   );
 }
-
