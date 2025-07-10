@@ -3,6 +3,34 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import { Resend } from "resend";
 
+// Type definitions for Firestore documents.
+// These are simplified versions of the types in the main app (src/lib/types.ts)
+// as the functions directory is a separate Node project.
+type DripCampaignEmail = {
+  subject: string;
+  body: string;
+  delayDays: number;
+};
+
+type DripCampaign = {
+  id: string;
+  name: string;
+  contactListId: string;
+  status: 'Active' | 'Paused' | 'Draft';
+  emails: DripCampaignEmail[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+type Contact = {
+    email: string;
+    firstName?: string;
+    lastName?: string;
+    status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
+    subscribedAt: string; // ISO string
+};
+
+
 admin.initializeApp();
 
 const db = admin.firestore();
@@ -15,7 +43,7 @@ const storage = admin.storage();
  */
 export const cleanupUnusedImages = functions.pubsub
   .schedule("every 24 hours")
-  .onRun(async (context) => {
+  .onRun(async (context: functions.EventContext) => {
     functions.logger.log("Starting unused image cleanup task.");
 
     const BUCKET_NAME = process.env.GCLOUD_PROJECT + ".appspot.com";
@@ -71,7 +99,7 @@ export const cleanupUnusedImages = functions.pubsub
             await file.delete();
             functions.logger.log(`Deleted unused image: ${file.name}`);
             deletedCount++;
-          } catch (error) {
+          } catch (error: any) {
             functions.logger.error(`Failed to delete ${file.name}:`, error);
           }
         }
@@ -89,7 +117,7 @@ export const cleanupUnusedImages = functions.pubsub
  */
 export const processDripCampaigns = functions.pubsub
   .schedule("every 24 hours")
-  .onRun(async (context) => {
+  .onRun(async (context: functions.EventContext) => {
     functions.logger.log("Starting drip campaign processing task.");
 
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -130,7 +158,7 @@ export const processDripCampaigns = functions.pubsub
     }
 
     for (const campaignDoc of activeDripCampaigns.docs) {
-      const campaign = campaignDoc.data();
+      const campaign = campaignDoc.data() as DripCampaign;
       const campaignName = campaign.name;
       const listId = campaign.contactListId;
       const emails = campaign.emails || [];
@@ -154,7 +182,7 @@ export const processDripCampaigns = functions.pubsub
       }
 
       for (const contactDoc of contactsSnapshot.docs) {
-        const contact = contactDoc.data();
+        const contact = contactDoc.data() as Contact;
         
         try {
           const subscribedDate = new Date(contact.subscribedAt);
@@ -166,7 +194,7 @@ export const processDripCampaigns = functions.pubsub
           const timeDiff = today.getTime() - subscribedDate.getTime();
           const daysSinceSubscription = Math.round(timeDiff / (1000 * 60 * 60 * 24));
 
-          const emailToSend = emails.find((e: any) => e.delayDays === daysSinceSubscription);
+          const emailToSend = emails.find((e) => e.delayDays === daysSinceSubscription);
 
           if (emailToSend) {
             functions.logger.log(`Matched day ${daysSinceSubscription} for ${contact.email} in campaign "${campaignName}". Preparing to send.`);
@@ -186,7 +214,7 @@ export const processDripCampaigns = functions.pubsub
             });
             functions.logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
           }
-        } catch (error) {
+        } catch (error: any) {
           functions.logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error);
         }
       }
