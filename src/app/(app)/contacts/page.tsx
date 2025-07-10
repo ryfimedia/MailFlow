@@ -17,7 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import Papa from 'papaparse';
 import { Separator } from "@/components/ui/separator";
 import type { ContactList } from "@/lib/types";
-import { getContactLists, createList, renameList, deleteList, importContacts } from "@/lib/actions";
+import { getContactLists, createList, renameList, deleteList, importContacts, getContactsByListId } from "@/lib/actions";
 
 const APP_CONTACT_FIELDS = [
   { key: 'email', label: 'Email Address', required: true },
@@ -121,6 +121,54 @@ export default function ContactsPage() {
       toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete list.' });
     }
   };
+
+  const handleExportList = async (listId: string, listName: string) => {
+    toast({
+        title: "Exporting contacts...",
+        description: "Your CSV file will be downloaded shortly.",
+    });
+
+    try {
+        const contactsToExport = await getContactsByListId(listId);
+
+        if (contactsToExport.length === 0) {
+            toast({
+                variant: "default",
+                title: "List is empty",
+                description: "There are no contacts in this list to export.",
+            });
+            return;
+        }
+
+        const dataForCsv = contactsToExport.map(contact => ({
+            "Email Address": contact.email,
+            "First Name": contact.firstName,
+            "Last Name": contact.lastName,
+            "Phone": contact.phone || '',
+            "Company": contact.company || '',
+            "Status": contact.status,
+            "Subscribed At": contact.subscribedAt,
+        }));
+
+        const csv = Papa.unparse(dataForCsv);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        const safeName = listName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        link.setAttribute("download", `contacts_${safeName}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (error) {
+        console.error("Failed to export contacts", error);
+        toast({
+            variant: "destructive",
+            title: "Export Failed",
+            description: "An unexpected error occurred while exporting contacts.",
+        });
+    }
+};
   
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -309,38 +357,45 @@ export default function ContactsPage() {
                                             </CardContent>
                                         </Link>
                                     </Card>
-                                    {!list.isSystemList && (
-                                        <div className="absolute top-2 right-2">
-                                            <DropdownMenu>
-                                                <DropdownMenuTrigger asChild>
-                                                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
-                                                        <MoreVertical className="h-4 w-4" />
-                                                    </Button>
-                                                </DropdownMenuTrigger>
-                                                <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                                    <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleRenameClick(list); }}>Rename</DropdownMenuItem>
-                                                    <AlertDialog>
-                                                        <AlertDialogTrigger asChild>
-                                                            <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Delete List</DropdownMenuItem>
-                                                        </AlertDialogTrigger>
-                                                        <AlertDialogContent>
-                                                            <AlertDialogHeader>
-                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                                <AlertDialogDescription>
-                                                                    This action cannot be undone. This will permanently delete the "{list.name}" list. Contacts in this list will not be deleted from the system, only from this list.
-                                                                </AlertDialogDescription>
-                                                            </AlertDialogHeader>
-                                                            <AlertDialogFooter>
-                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDeleteList(list.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
-                                                            </AlertDialogFooter>
-                                                        </AlertDialogContent>
-                                                    </AlertDialog>
-                                                </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
-                                    )}
+                                    <div className="absolute top-2 right-2">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button size="icon" variant="ghost" className="h-8 w-8" onClick={(e) => e.preventDefault()}>
+                                                    <MoreVertical className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                <DropdownMenuItem onSelect={() => handleExportList(list.id, list.name)}>
+                                                    Export to CSV
+                                                </DropdownMenuItem>
+                                                {!list.isSystemList && (
+                                                    <>
+                                                        <DropdownMenuItem onSelect={(e) => { e.preventDefault(); handleRenameClick(list); }}>
+                                                            Rename
+                                                        </DropdownMenuItem>
+                                                        <AlertDialog>
+                                                            <AlertDialogTrigger asChild>
+                                                                <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">Delete List</DropdownMenuItem>
+                                                            </AlertDialogTrigger>
+                                                            <AlertDialogContent>
+                                                                <AlertDialogHeader>
+                                                                    <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                    <AlertDialogDescription>
+                                                                        This action cannot be undone. This will permanently delete the "{list.name}" list. Contacts in this list will not be deleted from the system, only from this list.
+                                                                    </AlertDialogDescription>
+                                                                </AlertDialogHeader>
+                                                                <AlertDialogFooter>
+                                                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                    <AlertDialogAction onClick={() => handleDeleteList(list.id)} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+                                                                </AlertDialogFooter>
+                                                            </AlertDialogContent>
+                                                        </AlertDialog>
+                                                    </>
+                                                )}
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </div>
                                 </div>
                               )
                           })
