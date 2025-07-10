@@ -114,8 +114,8 @@ export default function ContactsClient({ initialLists }: { initialLists: Contact
       await deleteList(listId);
       toast({ title: 'List Deleted', description: 'The contact list has been removed.' });
       fetchLists();
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Error', description: 'Failed to delete list.' });
+    } catch (error: any) {
+      toast({ variant: 'destructive', title: 'Error', description: error.message || 'Failed to delete list.' });
     }
   };
 

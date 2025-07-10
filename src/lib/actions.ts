@@ -7,10 +7,11 @@ import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, Dr
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
 import admin from 'firebase-admin';
-import './firebase-admin'; // Ensure admin is initialized
+import './firebase-admin';
 
 const adminDb = admin.firestore();
 const adminStorage = admin.storage();
+
 
 const FREE_TIER_DAILY_LIMIT = 100;
 
@@ -508,6 +509,17 @@ export async function deleteList(id: string): Promise<void> {
     }
     if (listDoc.data()?.isSystemList) {
         throw new Error("Cannot delete a system list.");
+    }
+    
+    // Check if the list is used in any active drip campaigns
+    const activeDripsUsingList = await adminDb.collection('dripCampaigns')
+        .where('contactListId', '==', id)
+        .where('status', '==', 'Active')
+        .limit(1)
+        .get();
+
+    if (!activeDripsUsingList.empty) {
+        throw new Error("This list is used by an active drip campaign and cannot be deleted. Please pause or change the campaign's list first.");
     }
 
     const batch = adminDb.batch();
