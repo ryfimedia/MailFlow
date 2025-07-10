@@ -654,9 +654,7 @@ export async function getSettings(): Promise<Settings> {
 export async function saveSettings(data: Partial<Settings>) {
     const settingsDocRef = adminDb.collection('meta').doc('settings');
     
-    // To prevent accidentally wiping out parts of the settings,
-    // we fetch the existing settings and merge them with the new data.
-    const currentSettings = await getSettings();
+    const currentSettings = (await settingsDocRef.get()).data() || {};
 
     const newSettings: Settings = {
         ...currentSettings,
