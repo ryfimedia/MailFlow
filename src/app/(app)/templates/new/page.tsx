@@ -29,7 +29,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { useRouter } from "next/navigation";
-import { saveTemplate } from "@/lib/actions";
+import { saveTemplate, uploadImage } from "@/lib/actions";
 
 const templateFormSchema = z.object({
   name: z.string().min(3, { message: "Template name must be at least 3 characters." }),
@@ -93,7 +93,7 @@ function rgbToHex(rgb: string): string {
   return "#" + r + g + b;
 }
 
-const optimizeImageForEmail = (file: File, maxWidth = 1080, maxHeight = 1920, quality = 0.8): Promise<string> => {
+const resizeImage = (file: File, maxWidth = 1080, maxHeight = 1920, quality = 0.8): Promise<Blob> => {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (event) => {
@@ -120,8 +120,12 @@ const optimizeImageForEmail = (file: File, maxWidth = 1080, maxHeight = 1920, qu
                 ctx.drawImage(img, 0, 0, width, height);
                 
                 const outputFormat = file.type === 'image/png' ? 'image/png' : 'image/jpeg';
-                const dataUrl = canvas.toDataURL(outputFormat, quality);
-                resolve(dataUrl);
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        return reject(new Error("Canvas to Blob conversion failed."));
+                    }
+                    resolve(blob);
+                }, outputFormat, quality);
             };
             img.onerror = (err) => reject(err);
             img.src = event.target.result as string;
@@ -275,18 +279,32 @@ export default function NewTemplatePage() {
         const file = target.files[0];
         try {
            toast({
-            title: "Optimizing image...",
-            description: "Your image is being resized and compressed for email.",
+            title: "Optimizing & uploading...",
+            description: "Your image is being prepared and uploaded.",
           });
-          const optimizedDataUrl = await optimizeImageForEmail(file);
-          const imageHtml = `<p style="text-align: left;"><img src="${optimizedDataUrl}" style="max-width: 100%; height: auto; display: inline-block;" /></p><p><br></p>`;
+          const resizedBlob = await resizeImage(file);
+          
+          const formData = new FormData();
+          formData.append('image', resizedBlob, file.name);
+
+          const { url, error } = await uploadImage(formData);
+          
+          if (error || !url) {
+            throw new Error(error || "Image URL not returned from server.");
+          }
+
+          const imageHtml = `<p style="text-align: left;"><img src="${url}" style="max-width: 100%; height: auto; display: inline-block;" /></p><p><br></p>`;
           applyFormat('insertHTML', imageHtml);
-        } catch (error) {
-          console.error("Image optimization failed:", error);
+           toast({
+            title: "Image Uploaded",
+            description: "Your image has been added to the editor.",
+          });
+        } catch (error: any) {
+          console.error("Image upload failed:", error);
           toast({
             variant: "destructive",
             title: "Image Error",
-            description: "Could not process the image. Please try a different one.",
+            description: error.message || "Could not upload the image.",
           });
         }
       }

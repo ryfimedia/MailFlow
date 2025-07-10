@@ -7,6 +7,7 @@ import { Resend } from 'resend';
 import type { Campaign, Contact, ContactList, Settings, Template } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
+import { getStorage } from 'firebase-admin/storage';
 
 const FREE_TIER_DAILY_LIMIT = 100;
 
@@ -711,4 +712,33 @@ export async function getDashboardData() {
         recentCampaigns,
         chartData
     };
+}
+
+
+export async function uploadImage(formData: FormData): Promise<{ url?: string; error?: string }> {
+    try {
+        const imageFile = formData.get('image') as File | null;
+        if (!imageFile) {
+            return { error: 'No image file found.' };
+        }
+
+        const bucket = getStorage().bucket();
+        const fileName = `${Date.now()}-${imageFile.name.replace(/\s/g, '_')}`;
+        const file = bucket.file(`campaign-images/${fileName}`);
+
+        const fileBuffer = Buffer.from(await imageFile.arrayBuffer());
+
+        await file.save(fileBuffer, {
+            metadata: {
+                contentType: imageFile.type,
+            },
+        });
+
+        await file.makePublic();
+
+        return { url: file.publicUrl() };
+    } catch (error: any) {
+        console.error("Error uploading to Firebase Storage:", error);
+        return { error: 'Failed to upload image. Make sure your Storage security rules allow public writes.' };
+    }
 }

@@ -12,7 +12,8 @@ if (!admin.apps.length) {
     const serviceAccountString = Buffer.from(serviceAccountBase64, 'base64').toString('utf-8');
     const serviceAccount = JSON.parse(serviceAccountString);
     admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.credential.cert(serviceAccount),
+      storageBucket: `${serviceAccount.project_id}.appspot.com`
     });
   } catch (error: any) {
     // Add more context to the error message for easier debugging.
