@@ -16,6 +16,7 @@ export type Campaign = {
     recipientListId?: string;
     subject?: string;
     emailBody?: string;
+    tags?: string[];
     emailBackgroundColor?: string;
     createdAt: string;
     updatedAt: string;
@@ -31,6 +32,7 @@ export type Contact = {
     status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
     subscribedAt: string;
     listIds: string[];
+    tags?: string[];
 };
 
 export type ContactList = {

@@ -55,6 +55,7 @@ const campaignFormSchema = z.object({
   subject: z.string(),
   emailBody: z.string(),
   scheduledAt: z.date().optional(),
+  tags: z.array(z.string()).optional(),
   emailBackgroundColor: z.string().optional(),
 }).superRefine((data, ctx) => {
     if (data.name.length < 3) {
@@ -230,6 +231,7 @@ export default function NewCampaignPage() {
       subject: "",
       recipientListId: "",
       emailBody: "",
+      tags: [],
       emailBackgroundColor: "#ffffff",
     },
   });
@@ -255,6 +257,7 @@ export default function NewCampaignPage() {
                 form.reset({
                     ...campaignToEdit,
                     scheduledAt: campaignToEdit.scheduledAt ? new Date(campaignToEdit.scheduledAt) : undefined,
+                    tags: campaignToEdit.tags || [],
                 });
                 if (campaignToEdit.scheduledAt) {
                     setDate(new Date(campaignToEdit.scheduledAt));
@@ -664,6 +667,29 @@ export default function NewCampaignPage() {
                       </Select>
                       <FormDescription>
                         You can manage your lists on the <Link href="/contacts" className="underline">Contacts page</Link>.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="tags"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Filter by Tags (optional)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g. vip, new-customer"
+                          value={Array.isArray(field.value) ? field.value.join(', ') : ''}
+                          onChange={(e) => {
+                            const tags = e.target.value.split(',').map(tag => tag.trim()).filter(Boolean);
+                            field.onChange(tags);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Only send to contacts in the selected list that have ALL of these tags.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>

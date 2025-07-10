@@ -4,7 +4,7 @@
 import React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Plus } from "lucide-react";
+import { ArrowLeft, MoreVertical, ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Plus, Minus, Tag, X } from "lucide-react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
@@ -21,7 +21,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getContactListById, getContactsByListId, getContactLists, updateContact, removeContactsFromList, addContactsToLists } from "@/lib/actions";
+import { getContactListById, getContactsByListId, getContactLists, updateContact, removeContactsFromList, addContactsToLists, addTagsToContacts, removeTagsFromContacts } from "@/lib/actions";
 import type { Contact, ContactList } from "@/lib/types";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -31,6 +31,7 @@ const columnConfig = [
     { id: 'email', label: 'Email' },
     { id: 'phone', label: 'Phone' },
     { id: 'company', label: 'Company' },
+    { id: 'tags', label: 'Tags'},
     { id: 'status', label: 'Status' },
     { id: 'subscribedAt', label: 'Date' },
 ] as const;
@@ -43,11 +44,56 @@ const EditContactFormSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email." }),
   phone: z.string().optional(),
   company: z.string().optional(),
+  tags: z.array(z.string()).optional(),
   status: z.enum(['Subscribed', 'Unsubscribed', 'Bounced']),
 });
 
 type EditContactFormValues = z.infer<typeof EditContactFormSchema>;
 type SortConfig = { key: keyof Contact; direction: 'ascending' | 'descending' } | null;
+
+const TagInput = ({ value = [], onChange }: { value?: string[], onChange: (tags: string[]) => void }) => {
+    const [inputValue, setInputValue] = React.useState('');
+    const inputRef = React.useRef<HTMLInputElement>(null);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' && inputValue.trim()) {
+            e.preventDefault();
+            const newTag = inputValue.trim();
+            if (!value.includes(newTag)) {
+                onChange([...value, newTag]);
+            }
+            setInputValue('');
+        }
+    };
+
+    const removeTag = (tagToRemove: string) => {
+        onChange(value.filter(tag => tag !== tagToRemove));
+    };
+
+    return (
+        <div className="border p-2 rounded-md focus-within:ring-2 focus-within:ring-ring" onClick={() => inputRef.current?.focus()}>
+            <div className="flex flex-wrap gap-1 mb-2 min-h-[20px]">
+                {value.map(tag => (
+                    <Badge key={tag} variant="secondary" className="flex items-center gap-1">
+                        {tag}
+                        <button type="button" onClick={() => removeTag(tag)} className="rounded-full hover:bg-muted-foreground/20 p-0.5">
+                            <X className="h-3 w-3" />
+                        </button>
+                    </Badge>
+                ))}
+            </div>
+            <Input
+                ref={inputRef}
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Add a tag..."
+                className="border-0 h-auto p-0 focus-visible:ring-0 shadow-none bg-transparent"
+            />
+        </div>
+    );
+};
+
 
 export default function ContactListPage() {
     const params = useParams();
@@ -65,6 +111,10 @@ export default function ContactListPage() {
     const [selectedContact, setSelectedContact] = React.useState<Contact | null>(null);
 
     const [selectedContactIds, setSelectedContactIds] = React.useState<string[]>([]);
+    const [isManageTagsOpen, setIsManageTagsOpen] = React.useState(false);
+    const [tagsToAdd, setTagsToAdd] = React.useState('');
+    const [tagsToRemove, setTagsToRemove] = React.useState('');
+
 
     const [sortConfig, setSortConfig] = React.useState<SortConfig>({ key: 'lastName', direction: 'ascending' });
     const [visibleColumns, setVisibleColumns] = React.useState<Record<ColumnId, boolean>>({
@@ -73,13 +123,14 @@ export default function ContactListPage() {
         email: true,
         phone: false,
         company: false,
+        tags: true,
         status: true,
         subscribedAt: true,
     });
 
     const form = useForm<EditContactFormValues>({
         resolver: zodResolver(EditContactFormSchema),
-        defaultValues: { firstName: '', lastName: '', email: '', phone: '', company: '', status: 'Subscribed' }
+        defaultValues: { firstName: '', lastName: '', email: '', phone: '', company: '', tags: [], status: 'Subscribed' }
     });
 
     const fetchData = React.useCallback(async () => {
@@ -114,6 +165,7 @@ export default function ContactListPage() {
                 email: selectedContact.email,
                 phone: selectedContact.phone || '',
                 company: selectedContact.company || '',
+                tags: selectedContact.tags || [],
                 status: selectedContact.status,
             });
         }
@@ -223,6 +275,31 @@ export default function ContactListPage() {
             toast({ variant: 'destructive', title: "An error occurred" });
         }
     };
+
+    const handleBulkTagUpdate = async () => {
+        const toAdd = tagsToAdd.split(',').map(t => t.trim()).filter(Boolean);
+        const toRemove = tagsToRemove.split(',').map(t => t.trim()).filter(Boolean);
+
+        if (toAdd.length === 0 && toRemove.length === 0) {
+            toast({ variant: 'destructive', title: "No tags specified", description: "Please enter tags to add or remove." });
+            return;
+        }
+
+        try {
+            if (toAdd.length > 0) await addTagsToContacts(selectedContactIds, toAdd);
+            if (toRemove.length > 0) await removeTagsFromContacts(selectedContactIds, toRemove);
+
+            toast({ title: "Tags Updated", description: "Tags for selected contacts have been updated." });
+            setIsManageTagsOpen(false);
+            setTagsToAdd('');
+            setTagsToRemove('');
+            fetchData();
+            setSelectedContactIds([]);
+        } catch (error) {
+            console.error("Failed to update tags:", error);
+            toast({ variant: 'destructive', title: "An error occurred" });
+        }
+    };
     
     if (loading) {
         return (
@@ -312,7 +389,7 @@ export default function ContactListPage() {
                     </CardHeader>
                     <CardContent>
                          {selectedContactIds.length > 0 && !list.isSystemList && (
-                            <div className="mb-4 flex items-center gap-4 rounded-lg bg-secondary p-3">
+                            <div className="mb-4 flex items-center gap-2 rounded-lg bg-secondary p-3">
                                 <span className="text-sm font-medium">{selectedContactIds.length} selected</span>
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
@@ -330,6 +407,31 @@ export default function ContactListPage() {
                                         ))}
                                     </DropdownMenuContent>
                                 </DropdownMenu>
+                                <Dialog open={isManageTagsOpen} onOpenChange={setIsManageTagsOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button size="sm" variant="outline"><Tag className="mr-2 h-4 w-4" /> Manage Tags</Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>Manage Tags</DialogTitle>
+                                            <DialogDescription>Add or remove comma-separated tags for the {selectedContactIds.length} selected contacts.</DialogDescription>
+                                        </DialogHeader>
+                                        <div className="space-y-4 py-4">
+                                            <div className="space-y-2">
+                                                <Label htmlFor="tags-to-add">Tags to Add</Label>
+                                                <Input id="tags-to-add" value={tagsToAdd} onChange={e => setTagsToAdd(e.target.value)} placeholder="e.g. vip, new-customer"/>
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label htmlFor="tags-to-remove">Tags to Remove</Label>
+                                                <Input id="tags-to-remove" value={tagsToRemove} onChange={e => setTagsToRemove(e.target.value)} placeholder="e.g. inactive, old"/>
+                                            </div>
+                                        </div>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => setIsManageTagsOpen(false)}>Cancel</Button>
+                                            <Button onClick={handleBulkTagUpdate}>Update Tags</Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
                                  <Button size="sm" variant="destructive" onClick={handleRemoveSelectedFromList}>Remove from List</Button>
                             </div>
                          )}
@@ -377,6 +479,13 @@ export default function ContactListPage() {
                                             {visibleColumns.email && <TableCell>{contact.email}</TableCell>}
                                             {visibleColumns.phone && <TableCell>{contact.phone}</TableCell>}
                                             {visibleColumns.company && <TableCell>{contact.company}</TableCell>}
+                                            {visibleColumns.tags && (
+                                                <TableCell>
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {contact.tags?.map(tag => <Badge key={tag} variant="secondary">{tag}</Badge>)}
+                                                    </div>
+                                                </TableCell>
+                                            )}
                                             {visibleColumns.status &&
                                                 <TableCell>
                                                     <Badge variant={contact.status === 'Subscribed' ? 'default' : (contact.status === 'Unsubscribed' ? 'destructive' : 'secondary')}>{contact.status}</Badge>
@@ -442,6 +551,22 @@ export default function ContactListPage() {
                             <FormField control={form.control} name="email" render={({ field }) => ( <FormItem><FormLabel>Email</FormLabel><FormControl><Input placeholder="contact@email.com" {...field} /></FormControl><FormMessage /></FormItem> )} />
                             <FormField control={form.control} name="phone" render={({ field }) => ( <FormItem><FormLabel>Phone</FormLabel><FormControl><Input placeholder="(555) 555-5555" {...field} /></FormControl><FormMessage /></FormItem> )} />
                             <FormField control={form.control} name="company" render={({ field }) => ( <FormItem><FormLabel>Company</FormLabel><FormControl><Input placeholder="Acme Inc." {...field} /></FormControl><FormMessage /></FormItem> )} />
+                            <FormField
+                                control={form.control}
+                                name="tags"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Tags</FormLabel>
+                                        <FormControl>
+                                            <TagInput
+                                                value={field.value || []}
+                                                onChange={field.onChange}
+                                            />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                             <FormField control={form.control} name="status" render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Status</FormLabel>

@@ -25,6 +25,7 @@ const APP_CONTACT_FIELDS = [
   { key: 'lastName', label: 'Last Name', required: false },
   { key: 'phone', label: 'Phone', required: false },
   { key: 'company', label: 'Company', required: false },
+  { key: 'tags', label: 'Tags (comma-separated)', required: false },
 ] as const;
 
 
@@ -148,6 +149,7 @@ export default function ContactsPage() {
             "Company": contact.company || '',
             "Status": contact.status,
             "Subscribed At": contact.subscribedAt,
+            "Tags": contact.tags?.join(', ') || '',
         }));
 
         const csv = Papa.unparse(dataForCsv);
@@ -407,7 +409,7 @@ export default function ContactsPage() {
                <Card>
                 <CardHeader>
                   <CardTitle>Import Contacts</CardTitle>
-                  <CardDescription>Upload a CSV. Allowed columns: email, firstName, lastName, phone, company.</CardDescription>
+                  <CardDescription>Upload a CSV. Allowed columns: email, firstName, lastName, phone, company, tags.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex items-center justify-center w-full">

@@ -75,14 +75,14 @@ export async function getCampaignById(id: string): Promise<Campaign | null> {
 }
 
 export async function saveCampaign(data: Partial<Campaign> & { id: string | null }) {
-    const { id, ...campaignData } = data;
+    const { id, tags, ...campaignData } = data;
     
     if (campaignData.status === 'Draft') {
         if (id) {
-            await adminDb.collection('campaigns').doc(id).set({ ...campaignData, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            await adminDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
             return { id };
         } else {
-            const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+            const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, tags: tags || [], createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
             return { id: newDocRef.id };
         }
     }
@@ -95,9 +95,16 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     
     const resend = new Resend(settings.api.resendApiKey);
 
-    const contacts = await getContactsByListId(campaignData.recipientListId!);
+    const allContactsInList = await getContactsByListId(campaignData.recipientListId!);
+    const contacts = (tags && tags.length > 0)
+        ? allContactsInList.filter(c => c.tags && tags.every(tag => c.tags!.includes(tag)))
+        : allContactsInList;
+
     if (contacts.length === 0) {
-        return { error: 'No recipients in the selected list. Campaign saved as draft.' };
+        const errorMsg = (tags && tags.length > 0)
+        ? 'No recipients in the selected list match the specified tags. Campaign saved as draft.'
+        : 'No recipients in the selected list. Campaign saved as draft.';
+        return { error: errorMsg };
     }
 
     const companyName = settings.profile?.companyName || 'Your Company Name';
@@ -168,10 +175,10 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     }
 
     if (id) {
-        await adminDb.collection('campaigns').doc(id).set({ ...campaignData, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        await adminDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         return { id, success: successMessage };
     } else {
-        const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+        const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, tags: tags || [], createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
         return { id: newDocRef.id, success: successMessage };
     }
 }
@@ -436,6 +443,24 @@ export async function addContactsToLists(contactIds: string[], listIds: string[]
     return { addedCount: contactIds.length, targetListName: targetList?.name || 'list' };
 }
 
+export async function addTagsToContacts(contactIds: string[], tags: string[]): Promise<void> {
+    const batch = adminDb.batch();
+    contactIds.forEach(contactId => {
+        const contactRef = adminDb.collection('contacts').doc(contactId);
+        batch.update(contactRef, { tags: FieldValue.arrayUnion(...tags) });
+    });
+    await batch.commit();
+}
+
+export async function removeTagsFromContacts(contactIds: string[], tags: string[]): Promise<void> {
+    const batch = adminDb.batch();
+    contactIds.forEach(contactId => {
+        const contactRef = adminDb.collection('contacts').doc(contactId);
+        batch.update(contactRef, { tags: FieldValue.arrayRemove(...tags) });
+    });
+    await batch.commit();
+}
+
 export async function importContacts(data: {
     contacts: Array<Record<string, string>>,
     columnMapping: Record<string, string>,
@@ -477,6 +502,7 @@ export async function importContacts(data: {
                     lastName: data.columnMapping.lastName ? row[data.columnMapping.lastName] || '' : '',
                     phone: data.columnMapping.phone ? row[data.columnMapping.phone] || '' : '',
                     company: data.columnMapping.company ? row[data.columnMapping.company] || '' : '',
+                    tags: data.columnMapping.tags ? (row[data.columnMapping.tags] || '').split(',').map(t => t.trim()).filter(Boolean) : [],
                     status: 'Subscribed',
                     subscribedAt: new Date().toISOString(),
                     listIds: ['all', targetListId],
