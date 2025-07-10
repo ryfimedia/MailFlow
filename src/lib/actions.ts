@@ -89,7 +89,13 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     }
 
     const settings = await getSettings();
-    const isSetupComplete = !!(settings.api?.resendApiKey && settings.defaults?.fromEmail && settings.defaults?.isVerified && settings.profile?.companyName && settings.profile?.address);
+    const isSetupComplete = !!(
+      settings.api?.resendApiKey &&
+      settings.defaults?.fromEmail &&
+      settings.defaults?.fromName &&
+      settings.profile?.companyName &&
+      settings.profile?.address
+    );
     if (!isSetupComplete) {
       return { error: 'Your account setup is incomplete. Please configure your settings before sending.' };
     }
