@@ -25,6 +25,7 @@ import {
   LayoutTemplate,
   Image,
   Mailbox,
+  ClipboardList,
 } from "lucide-react";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -63,6 +64,7 @@ export default function AppLayout({
     { href: "/drip-campaigns", label: "Drip Campaigns", icon: Mailbox },
     { href: "/templates", label: "Templates", icon: LayoutTemplate },
     { href: "/contacts", label: "Contacts", icon: Users },
+    { href: "/forms", label: "Forms", icon: ClipboardList },
     { href: "/media", label: "Media Library", icon: Image },
     { href: "/settings", label: "Settings", icon: Settings },
   ];

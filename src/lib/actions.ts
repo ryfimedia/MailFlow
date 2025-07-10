@@ -4,7 +4,7 @@
 import { adminDb } from './firebase-admin';
 import { z } from 'zod';
 import { Resend } from 'resend';
-import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign } from './types';
+import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign, OptInForm } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
 import { getStorage } from 'firebase-admin/storage';
@@ -311,6 +311,40 @@ export async function saveTemplate(data: Omit<Template, 'id' | 'createdAt'> & { 
 
 export async function deleteTemplate(id: string) {
     await adminDb.collection('templates').doc(id).delete();
+}
+
+// ==== OPT-IN FORMS ====
+
+export async function getOptInForms(): Promise<OptInForm[]> {
+    const snapshot = await adminDb.collection('optInForms').orderBy('createdAt', 'desc').get();
+    return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as OptInForm);
+}
+
+export async function getOptInFormById(id: string): Promise<OptInForm | null> {
+    const doc = await adminDb.collection('optInForms').doc(id).get();
+    return docWithIdAndTimestamps(doc) as OptInForm | null;
+}
+
+export async function saveOptInForm(data: Partial<OptInForm> & { id?: string | null }) {
+    const { id, ...formData } = data;
+    if (id) {
+        await adminDb.collection('optInForms').doc(id).set({
+            ...formData,
+            updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        return { id };
+    } else {
+        const newDocRef = await adminDb.collection('optInForms').add({
+            ...formData,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
+        });
+        return { id: newDocRef.id };
+    }
+}
+
+export async function deleteOptInForm(id: string) {
+    await adminDb.collection('optInForms').doc(id).delete();
 }
 
 // ==== CONTACTS & LISTS ====

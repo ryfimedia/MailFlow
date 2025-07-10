@@ -85,3 +85,18 @@ export type MediaImage = {
     url: string;
     createdAt: string;
 };
+
+export type OptInForm = {
+    id: string;
+    name: string;
+    contactListId: string;
+    title: string;
+    description?: string;
+    buttonText: string;
+    fields: {
+        firstName: boolean;
+        lastName: boolean;
+    };
+    createdAt: string;
+    updatedAt: string;
+};
