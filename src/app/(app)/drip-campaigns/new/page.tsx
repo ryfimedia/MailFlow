@@ -21,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { getContactLists, saveDripCampaign, getDripCampaignById } from "@/lib/actions";
 import type { ContactList, DripCampaign } from "@/lib/types";
@@ -213,14 +213,44 @@ export default function NewDripCampaignPage() {
                    </div>
                 </div>
 
-                <FormField control={form.control} name={`emails.${index}.body`} render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Email Body (HTML)</FormLabel>
-                    <FormControl><Textarea placeholder="<p>Hi [FirstName],</p><p>Welcome to our list!</p>" {...field} rows={8} /></FormControl>
-                    <FormDescription>Use [FirstName], [LastName], and [Email] for personalization.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )} />
+                <FormField
+                  control={form.control}
+                  name={`emails.${index}.body`}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Email Body</FormLabel>
+                      <Tabs defaultValue="html" className="w-full">
+                        <TabsList>
+                          <TabsTrigger value="html">HTML</TabsTrigger>
+                          <TabsTrigger value="preview">Preview</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="html">
+                          <FormControl>
+                            <Textarea
+                              placeholder="<p>Hi [FirstName],</p><p>Welcome to our list!</p>"
+                              {...field}
+                              rows={10}
+                              className="font-code"
+                            />
+                          </FormControl>
+                          <FormDescription className="mt-2">
+                            Use [FirstName], [LastName], and [Email] for personalization.
+                          </FormDescription>
+                        </TabsContent>
+                        <TabsContent value="preview">
+                          <div className="w-full rounded-md border min-h-[268px] bg-white">
+                            <iframe
+                              srcDoc={field.value}
+                              title="Email Preview"
+                              className="w-full h-full border-0 min-h-[268px]"
+                            />
+                          </div>
+                        </TabsContent>
+                      </Tabs>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
               </div>
             ))}
           </CardContent>
