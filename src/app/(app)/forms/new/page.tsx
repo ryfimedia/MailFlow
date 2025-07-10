@@ -25,6 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getContactLists, saveOptInForm, getOptInFormById } from "@/lib/actions";
 import type { ContactList, OptInForm } from "@/lib/types";
 import { Save, ArrowLeft, Loader2 } from "lucide-react";
+import { Label } from "@/components/ui/label";
 
 const optInFormSchema = z.object({
   name: z.string().min(3, "Form name must be at least 3 characters."),
