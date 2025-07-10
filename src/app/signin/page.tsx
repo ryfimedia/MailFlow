@@ -45,10 +45,10 @@ export default function SignInPage() {
       const token = await userCredential.user.getIdToken();
       Cookies.set('firebaseIdToken', token, { expires: 1, path: '/' });
       
-      router.push('/start');
       toast({ 
         title: "Welcome back!",
       });
+      // The redirect is now handled by the AuthProvider, which is more reliable.
 
     } catch (error: any) {
       const errorCode = error.code;

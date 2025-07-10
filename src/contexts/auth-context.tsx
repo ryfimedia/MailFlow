@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, { createContext, useContext, useEffect, useState, ReactNode, useRef } from 'react';
 import { onAuthStateChanged, User, signOut as firebaseSignOut, getIdToken } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
@@ -19,21 +19,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
+  const initialLoadHandled = useRef(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const token = await getIdToken(user);
+    const unsubscribe = onAuthStateChanged(auth, async (newUser) => {
+      const wasJustSignedOut = user && !newUser;
+      const wasJustSignedIn = !user && newUser;
+      
+      setUser(newUser);
+      
+      if (newUser) {
+        const token = await getIdToken(newUser);
         Cookies.set('firebaseIdToken', token, { expires: 1, path: '/' });
       } else {
         Cookies.remove('firebaseIdToken');
       }
+
+      // This logic ensures the redirect only happens on the initial sign-in event.
+      if (wasJustSignedIn && !initialLoadHandled.current) {
+        router.push('/start');
+      }
+
+      if (!initialLoadHandled.current) {
+        initialLoadHandled.current = true;
+      }
+      
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [user, router]);
   
   const signOut = async () => {
       try {
