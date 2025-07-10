@@ -95,14 +95,14 @@ export default function AppLayout({
       <SidebarProvider>
         <Sidebar>
           <SidebarHeader>
-            <div className="flex items-center gap-2">
+            <Link href="/dashboard" className="flex items-center gap-2">
               <div className="p-2 rounded-lg bg-primary text-primary-foreground">
                 <Rocket className="w-6 h-6" />
               </div>
               <h1 className="text-xl font-bold font-headline text-foreground">
                 Ryfi MailFlow
               </h1>
-            </div>
+            </Link>
           </SidebarHeader>
           <SidebarContent>
             <SidebarMenu>
@@ -120,7 +120,7 @@ export default function AppLayout({
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    isActive={pathname === item.href}
+                    isActive={pathname.startsWith(item.href)}
                     tooltip={item.label}
                   >
                     <Link href={item.href}>
