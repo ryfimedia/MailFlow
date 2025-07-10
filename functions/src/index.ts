@@ -27,6 +27,7 @@ type DripCampaign = {
 };
 
 type Contact = {
+    id: string;
     email: string;
     firstName?: string;
     lastName?: string;
@@ -102,7 +103,7 @@ export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) =>
             logger.log(`Deleted unused image: ${file.name}`);
             deletedCount++;
           } catch (error) {
-            logger.error(`Failed to delete ${file.name}:`, error);
+            logger.error(`Failed to delete ${file.name}:`, error as any);
           }
         }
       }
@@ -134,18 +135,6 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
     const fromEmail = settings.defaults?.fromEmail || "noreply@yourdomain.com";
     const companyName = settings.profile?.companyName || "Your Company Name";
     const companyAddress = settings.profile?.address || "Your Physical Address";
-
-    const footer = `
-        <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-            <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
-            <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-            <p style="margin: 0;">
-                <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
-                <span style="padding: 0 5px;">|</span>
-                <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
-            </p>
-        </div>
-    `;
 
     const activeDripCampaigns = await db
       .collection("dripCampaigns")
@@ -182,7 +171,7 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
       }
 
       for (const contactDoc of contactsSnapshot.docs) {
-        const contact = contactDoc.data() as Contact;
+        const contact = { ...contactDoc.data(), id: contactDoc.id } as Contact;
         
         try {
           const subscribedDate = new Date(contact.subscribedAt);
@@ -204,18 +193,33 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
               .replace(/\[LastName\]/g, contact.lastName || '')
               .replace(/\[Email\]/g, contact.email || '');
 
+            const listUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
+            const allUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&all=true`;
+                
+            const footer = `
+                <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+                    <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+                    <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+                    <p style="margin: 0;">
+                        <a href="${listUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+                        <span style="padding: 0 5px;">|</span>
+                        <a href="${allUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
+                    </p>
+                </div>
+            `;
+            
             const fullHtml = personalizedBody + footer;
 
             await resend.emails.send({
               from: `${fromName} <${fromEmail}>`,
-              to: contact.email,
+              to: [contact.email],
               subject: emailToSend.subject,
               html: fullHtml,
             });
             logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
           }
         } catch (error) {
-          logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error);
+          logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error as any);
         }
       }
     }

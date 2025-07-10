@@ -118,48 +118,58 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
 
     const companyName = settings.profile?.companyName || 'Your Company Name';
     const companyAddress = settings.profile?.address || 'Your Physical Address';
-    const footer = `
-        <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-            <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
-            <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-            <p style="margin: 0;">
-                <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
-                <span style="padding: 0 5px;">|</span>
-                <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
-            </p>
-        </div>
-    `;
-    campaignData.emailBody = (campaignData.emailBody || '') + footer;
-
-    const today = new Date().toISOString().split('T')[0];
-    const usageDoc = await adminDb.collection('usage').doc(today).get();
-    const sentToday = usageDoc.exists ? (usageDoc.data()?.count || 0) : 0;
     
-    const canSendToday = Math.max(0, FREE_TIER_DAILY_LIMIT - sentToday);
     const recipients = contacts.map(c => c.email);
-    
-    const emailsToSendNow = recipients.slice(0, canSendToday);
-    const emailsToQueue = recipients.slice(canSendToday);
 
     const fromName = settings.defaults?.fromName || 'Your Name';
     const fromEmail = settings.defaults?.fromEmail || 'default@yourdomain.com';
 
     let sendError = null;
 
-    if (emailsToSendNow.length > 0) {
+    // Resend has a limit of 50 recipients per API call in the 'to' field.
+    // We'll batch our sends to respect this limit.
+    const BATCH_SIZE = 50;
+    for (let i = 0; i < contacts.length; i += BATCH_SIZE) {
+        const batchContacts = contacts.slice(i, i + BATCH_SIZE);
+        
         try {
-            await resend.emails.send({
-                from: `${fromName} <${fromEmail}>`,
-                to: emailsToSendNow,
-                subject: campaignData.subject || 'No Subject',
-                html: campaignData.emailBody,
-            });
-            await adminDb.collection('usage').doc(today).set({ count: sentToday + emailsToSendNow.length }, { merge: true });
+            await Promise.all(batchContacts.map(contact => {
+                const listUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&listId=${campaignData.recipientListId}`;
+                const allUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&all=true`;
+                
+                const footer = `
+                    <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+                        <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+                        <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+                        <p style="margin: 0;">
+                            <a href="${listUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+                            <span style="padding: 0 5px;">|</span>
+                            <a href="${allUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
+                        </p>
+                    </div>
+                `;
+
+                const personalizedBody = (campaignData.emailBody || '')
+                  .replace(/\[FirstName\]/g, contact.firstName || '')
+                  .replace(/\[LastName\]/g, contact.lastName || '')
+                  .replace(/\[Email\]/g, contact.email || '');
+
+                const fullHtml = personalizedBody + footer;
+
+                return resend.emails.send({
+                    from: `${fromName} <${fromEmail}>`,
+                    to: [contact.email],
+                    subject: campaignData.subject || 'No Subject',
+                    html: fullHtml,
+                });
+            }));
         } catch (error: any) {
             console.error('Resend API error:', error);
             sendError = `Could not send campaign: ${error.message}.`;
+            break; // Stop sending if one batch fails
         }
     }
+
 
     if (sendError) {
         return { error: sendError };
@@ -167,21 +177,14 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
 
     campaignData.sentDate = new Date().toISOString();
     campaignData.recipients = recipients.length;
-    campaignData.successfulDeliveries = emailsToSendNow.length;
+    campaignData.successfulDeliveries = recipients.length; // Assuming all sent if no error
     campaignData.openRate = '0.0%';
     campaignData.clickRate = '0.0%';
     campaignData.bounces = 0;
     campaignData.unsubscribes = 0;
+    campaignData.status = 'Sent';
 
-    let successMessage = `Campaign sent to ${emailsToSendNow.length} recipients.`;
-
-    if (emailsToQueue.length > 0) {
-        campaignData.status = 'Sending';
-        campaignData.queuedRecipients = emailsToQueue.length;
-        successMessage += ` ${emailsToQueue.length} emails have been queued to send tomorrow.`;
-    } else {
-        campaignData.status = 'Sent';
-    }
+    let successMessage = `Campaign sent to ${recipients.length} recipients.`;
 
     if (id) {
         await adminDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -192,8 +195,8 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     }
 }
 
-export async function duplicateCampaign(id: string): Promise<Campaign | null> {
-    const originalCampaign = await getCampaignById(id);
+export async function duplicateCampaign(campaignId: string): Promise<Campaign | null> {
+    const originalCampaign = await getCampaignById(campaignId);
     if (!originalCampaign) return null;
 
     const { id: originalId, status, sentDate, ...newCampaignData } = originalCampaign;
@@ -737,4 +740,57 @@ export async function deleteMediaImage(fileName: string): Promise<{ success: boo
         console.error("Error deleting image from Firebase Storage:", error);
         return { success: false, error: 'Failed to delete image.' };
     }
+}
+
+// ==== UNSUBSCRIBE ====
+
+export async function getUnsubscribeDetails(contactId: string, listId: string | null, all: boolean): Promise<{contactEmail: string, listName?: string, error?: string}> {
+    const contactRef = adminDb.collection('contacts').doc(contactId);
+    const contactDoc = await contactRef.get();
+    
+    if (!contactDoc.exists) {
+        return { error: 'This contact does not exist.', contactEmail: '' };
+    }
+    const contact = contactDoc.data() as Contact;
+    
+    if (all || !listId) {
+        return { contactEmail: contact.email };
+    }
+
+    const listRef = adminDb.collection('lists').doc(listId);
+    const listDoc = await listRef.get();
+    if (!listDoc.exists) {
+         return { error: 'The specified list does not exist.', contactEmail: '' };
+    }
+    const list = listDoc.data() as ContactList;
+
+    return { contactEmail: contact.email, listName: list.name };
+}
+
+export async function unsubscribeContact(contactId: string, listId: string | null, all: boolean): Promise<{success?: boolean, error?: string}> {
+    const contactRef = adminDb.collection('contacts').doc(contactId);
+    const contactDoc = await contactRef.get();
+    if (!contactDoc.exists) {
+        return { error: 'Contact not found.' };
+    }
+    const contactData = contactDoc.data() as Contact;
+
+    const batch = adminDb.batch();
+
+    if (all) {
+        const allUserLists = contactData.listIds.filter(id => !['all', 'unsubscribes', 'bounces'].includes(id));
+        batch.update(contactRef, { 
+            status: 'Unsubscribed', 
+            listIds: FieldValue.arrayRemove(...allUserLists)
+        });
+        batch.update(contactRef, { listIds: FieldValue.arrayUnion('unsubscribes') });
+    } else if (listId) {
+        batch.update(contactRef, { listIds: FieldValue.arrayRemove(listId) });
+    } else {
+        return { error: 'No list specified for unsubscribe.' };
+    }
+
+    await batch.commit();
+    await updateAllListCounts();
+    return { success: true };
 }

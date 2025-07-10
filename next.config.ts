@@ -3,6 +3,9 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
+  env: {
+    NEXT_PUBLIC_BASE_URL: process.env.URL,
+  },
   allowedDevOrigins: [
     'https://6000-firebase-studio-1752079772530.cluster-pb4ljhlmg5hqsxnzpc56r3prxw.cloudworkstations.dev',
   ],
