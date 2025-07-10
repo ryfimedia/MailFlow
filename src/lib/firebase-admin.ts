@@ -5,7 +5,7 @@ import admin from 'firebase-admin';
 if (!admin.apps.length) {
   const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
   if (!serviceAccountBase64) {
-    throw new Error('Firebase service account key is not set in environment variables. Please configure it in your project settings.');
+    throw new Error('Firebase service account key is not set. In Firebase Studio, please ensure you have connected a Firebase project and that the service account secrets are correctly configured in the environment settings.');
   }
 
   try {
