@@ -58,7 +58,7 @@ function AuthWrapper({ children }: { children: React.ReactNode }) {
 
     React.useEffect(() => {
         if (!loading && !currentUser) {
-            router.push('/login');
+            router.push('/');
         }
     }, [currentUser, loading, router]);
 

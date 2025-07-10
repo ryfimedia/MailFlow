@@ -268,6 +268,30 @@ export async function deleteTemplate(id: string) {
 
 // ==== CONTACTS & LISTS ====
 
+export async function createContactForNewUser(data: {
+    uid: string;
+    email: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+    company?: string;
+}) {
+    const allContactsListDoc = await adminDb.collection('lists').doc('all').get();
+    if (!allContactsListDoc.exists) {
+        await adminDb.collection('lists').doc('all').set({ name: 'All Contacts', isSystemList: true, isMasterList: true, count: 0, createdAt: FieldValue.serverTimestamp() });
+    }
+
+    const newContactRef = adminDb.collection('contacts').doc(); // Auto-generate ID
+    await newContactRef.set({
+        ...data,
+        status: 'Subscribed',
+        subscribedAt: new Date().toISOString(),
+        listIds: ['all'], // Add to 'all' contacts list by default
+    });
+
+    await updateAllListCounts();
+}
+
 export async function getContactLists(): Promise<ContactList[]> {
     const listsCollection = adminDb.collection('lists');
     const contactsCollection = adminDb.collection('contacts');

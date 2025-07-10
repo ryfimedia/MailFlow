@@ -1,11 +1,10 @@
+
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   onAuthStateChanged,
   User,
-  GoogleAuthProvider,
-  signInWithPopup,
   signOut,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -13,12 +12,21 @@ import {
 } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
+import { createContactForNewUser } from '@/lib/actions';
+
+type SignupData = {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  phone?: string;
+  company?: string;
+};
 
 type AuthContextType = {
   currentUser: User | null;
   loading: boolean;
-  signInWithGoogle: () => Promise<void>;
-  emailPasswordSignUp: (email: string, pass: string) => Promise<{ error?: AuthError }>;
+  emailPasswordSignUp: (data: SignupData) => Promise<{ error?: AuthError }>;
   emailPasswordSignIn: (email: string, pass:string) => Promise<{ error?: AuthError }>;
   logout: () => void;
 };
@@ -39,19 +47,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
-    const provider = new GoogleAuthProvider();
+  const emailPasswordSignUp = async (data: SignupData) => {
     try {
-      await signInWithPopup(auth, provider);
-      router.push('/dashboard');
-    } catch (error) {
-      console.error('Google Sign-In Error:', error);
-    }
-  };
+      const userCredential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+      const user = userCredential.user;
+      
+      if (user) {
+        await createContactForNewUser({
+          uid: user.uid,
+          email: data.email,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          phone: data.phone,
+          company: data.company
+        });
+      }
 
-  const emailPasswordSignUp = async (email: string, pass: string) => {
-    try {
-      await createUserWithEmailAndPassword(auth, email, pass);
       router.push('/dashboard');
       return {};
     } catch (error) {
@@ -79,7 +90,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = {
     currentUser,
     loading,
-    signInWithGoogle,
     emailPasswordSignUp,
     emailPasswordSignIn,
     logout,

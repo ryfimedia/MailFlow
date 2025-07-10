@@ -24,6 +24,7 @@ export type Campaign = {
 
 export type Contact = {
     id: string;
+    uid?: string;
     firstName: string;
     lastName: string;
     email: string;
