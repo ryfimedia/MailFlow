@@ -111,7 +111,7 @@ export default function AppLayout({
             ))}
           </SidebarMenu>
         </SidebarContent>
-        <SidebarFooter>
+        <SidebarFooter className="p-4">
           <div className="flex flex-col">
             <span className="text-sm font-semibold">User</span>
             <span className="text-xs text-muted-foreground">user@email.com</span>
