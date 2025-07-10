@@ -12,29 +12,36 @@ import { auth as adminAuth } from 'firebase-admin';
 
 // This guard prevents re-initializing the app on hot reloads.
 if (!admin.apps.length) {
-  const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
-  if (!serviceAccountBase64) {
-    throw new Error('Firebase service account key is not set. In Firebase Studio, please ensure you have connected a Firebase project and that the service account secrets are correctly configured in the environment settings.');
-  }
-
-  try {
-    const serviceAccountString = Buffer.from(serviceAccountBase64, 'base64').toString('utf-8');
-    const serviceAccount = JSON.parse(serviceAccountString);
-    
-    // Determine the storage bucket from environment or service account
-    const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || (process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : undefined);
-
-    if (!storageBucket) {
-        throw new Error("Could not determine the storage bucket. Ensure NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET or GCLOUD_PROJECT env var is set.");
+  // When deployed to App Hosting, the service account is automatically available.
+  // For local development, we'll use a simplified initialization if the secret isn't set.
+  if (process.env.NODE_ENV === 'production') {
+    const serviceAccountBase64 = process.env.FIREBASE_SERVICE_ACCOUNT_BASE64;
+    if (!serviceAccountBase64) {
+      throw new Error('Firebase service account key is not set for production. In Firebase Studio, please ensure you have connected a Firebase project and that the service account secrets are correctly configured in the environment settings.');
     }
 
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-      storageBucket: storageBucket
-    });
-  } catch (error: any) {
-    // Add more context to the error message for easier debugging.
-    throw new Error(`Failed to initialize Firebase Admin SDK. Please check if your FIREBASE_SERVICE_ACCOUNT_BASE64 secret is a valid JSON. Error: ${error.message}`);
+    try {
+      const serviceAccountString = Buffer.from(serviceAccountBase64, 'base64').toString('utf-8');
+      const serviceAccount = JSON.parse(serviceAccountString);
+      
+      const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || (process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : undefined);
+      if (!storageBucket) {
+        throw new Error("Could not determine the storage bucket. Ensure NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET or GCLOUD_PROJECT env var is set.");
+      }
+
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        storageBucket: storageBucket
+      });
+    } catch (error: any) {
+      throw new Error(`Failed to initialize Firebase Admin SDK. Please check if your FIREBASE_SERVICE_ACCOUNT_BASE64 secret is a valid JSON. Error: ${error.message}`);
+    }
+  } else {
+    // Local development initialization
+     admin.initializeApp({
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+     });
   }
 }
 
@@ -63,9 +70,9 @@ async function getDb() {
 
 
 function getBucket() {
-    const bucketName = process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : undefined;
+    const bucketName = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
     if (!bucketName) {
-        throw new Error('Firebase Storage bucket name is not configured. Check your GCLOUD_PROJECT env var.');
+        throw new Error('Firebase Storage bucket name is not configured. Check your NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET env var.');
     }
     return admin.storage().bucket(bucketName);
 }
