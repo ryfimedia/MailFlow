@@ -24,8 +24,33 @@ import {
   Rocket,
   PlusCircle,
   LayoutTemplate,
+  Terminal,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { SettingsProvider, useSettings } from "@/contexts/settings-context";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+
+function SetupBanner() {
+    const { isSetupComplete, loading } = useSettings();
+
+    if (loading || isSetupComplete) {
+        return null;
+    }
+
+    return (
+        <Alert className="m-4 mb-0 border-accent bg-accent/10 text-foreground rounded-lg">
+            <Terminal className="h-4 w-4" />
+            <AlertTitle className="font-bold">Complete Your Account Setup!</AlertTitle>
+            <AlertDescription>
+                You need to configure your settings before you can send emails. 
+                <Button asChild variant="link" className="p-0 pl-1 h-auto font-semibold">
+                    <Link href="/settings">Go to Settings</Link>
+                </Button>
+            </AlertDescription>
+        </Alert>
+    );
+}
+
 
 export default function AppLayout({
   children,
@@ -100,15 +125,18 @@ export default function AppLayout({
           </div>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
-        <header className="flex items-center justify-between p-4 bg-background border-b md:justify-end">
-          <SidebarTrigger className="md:hidden" />
-          <div className="flex items-center gap-4">
-             {/* Future user menu can be added here */}
-          </div>
-        </header>
-        <main className="p-4 md:p-6 lg:p-8">{children}</main>
-      </SidebarInset>
+      <SettingsProvider>
+        <SidebarInset>
+            <header className="flex items-center justify-between p-4 bg-background border-b md:justify-end">
+            <SidebarTrigger className="md:hidden" />
+            <div className="flex items-center gap-4">
+                {/* Future user menu can be added here */}
+            </div>
+            </header>
+            <SetupBanner />
+            <main className="p-4 md:p-6 lg:p-8">{children}</main>
+        </SidebarInset>
+      </SettingsProvider>
     </SidebarProvider>
   );
 }

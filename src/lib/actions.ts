@@ -10,7 +10,6 @@ import { defaultTemplates } from './default-templates';
 
 const FREE_TIER_DAILY_LIMIT = 100;
 
-// Helper function to convert Firestore doc to a serializable object
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
     if (!doc.exists) return null;
     const data = doc.data() as any;
@@ -62,7 +61,6 @@ export async function getCampaigns(): Promise<Campaign[]> {
              
              await batch.commit();
 
-             // Re-fetch campaigns to include the new one.
              const newCampaignsSnapshot = await campaignsCollection.orderBy('createdAt', 'desc').get();
              return newCampaignsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
         }
@@ -79,7 +77,6 @@ export async function getCampaignById(id: string): Promise<Campaign | null> {
 export async function saveCampaign(data: Partial<Campaign> & { id: string | null }) {
     const { id, ...campaignData } = data;
     
-    // If not sending/scheduling, just save as draft.
     if (campaignData.status === 'Draft') {
         if (id) {
             await adminDb.collection('campaigns').doc(id).set({ ...campaignData, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
@@ -90,11 +87,12 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
         }
     }
 
-    // --- Sending Logic ---
     const settings = await getSettings();
-    if (!settings.api?.resendApiKey) {
-        return { error: 'Resend API Key is not configured in Settings. Campaign saved as draft.' };
+    const isSetupComplete = !!(settings.api?.resendApiKey && settings.defaults?.fromEmail && settings.defaults?.isVerified && settings.profile?.companyName && settings.profile?.address);
+    if (!isSetupComplete) {
+      return { error: 'Your account setup is incomplete. Please configure your settings before sending.' };
     }
+    
     const resend = new Resend(settings.api.resendApiKey);
 
     const contacts = await getContactsByListId(campaignData.recipientListId!);
@@ -102,7 +100,6 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
         return { error: 'No recipients in the selected list. Campaign saved as draft.' };
     }
 
-    // Add footer
     const companyName = settings.profile?.companyName || 'Your Company Name';
     const companyAddress = settings.profile?.address || 'Your Physical Address';
     const footer = `
@@ -118,7 +115,6 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     `;
     campaignData.emailBody = (campaignData.emailBody || '') + footer;
 
-    // --- Rate Limiting & Queuing Logic ---
     const today = new Date().toISOString().split('T')[0];
     const usageDoc = await adminDb.collection('usage').doc(today).get();
     const sentToday = usageDoc.exists ? (usageDoc.data()?.count || 0) : 0;
@@ -153,7 +149,6 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
         return { error: sendError };
     }
 
-    // Update campaign stats
     campaignData.sentDate = new Date().toISOString();
     campaignData.recipients = recipients.length;
     campaignData.successfulDeliveries = emailsToSendNow.length;
@@ -165,16 +160,13 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     let successMessage = `Campaign sent to ${emailsToSendNow.length} recipients.`;
 
     if (emailsToQueue.length > 0) {
-        campaignData.status = 'Sending'; // Partial send
-        // In a real app, you'd store emailsToQueue in a subcollection for a cron job to process.
-        // For this prototype, we just update the status and message.
+        campaignData.status = 'Sending';
         campaignData.queuedRecipients = emailsToQueue.length;
         successMessage += ` ${emailsToQueue.length} emails have been queued to send tomorrow.`;
     } else {
         campaignData.status = 'Sent';
     }
 
-    // Save final campaign state
     if (id) {
         await adminDb.collection('campaigns').doc(id).set({ ...campaignData, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         return { id, success: successMessage };
@@ -198,7 +190,6 @@ export async function duplicateCampaign(id: string): Promise<Campaign | null> {
         clickRate: '-',
     };
 
-    // Remove stats
     delete newCampaign.recipients;
     delete newCampaign.successfulDeliveries;
     delete newCampaign.bounces;
@@ -233,18 +224,15 @@ export async function getTemplates(): Promise<Template[]> {
     if (!settings.templatesSeeded) {
         const batch = adminDb.batch();
         
-        // Add default templates
         defaultTemplates.forEach(template => {
             const docRef = templatesCollection.doc();
             batch.set(docRef, { ...template, createdAt: FieldValue.serverTimestamp() });
         });
         
-        // Set the flag
         batch.set(settingsRef, { templatesSeeded: true }, { merge: true });
         
         await batch.commit();
 
-        // Re-fetch templates
         const newSnapshot = await templatesCollection.orderBy('createdAt', 'desc').get();
         return newSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Template);
     }
@@ -276,14 +264,12 @@ export async function getContactLists(): Promise<ContactList[]> {
     const listsCollection = adminDb.collection('lists');
     const contactsCollection = adminDb.collection('contacts');
 
-    // --- Seeding Logic ---
     let listsSnapshot = await listsCollection.get();
     const batch = adminDb.batch();
     let isSeedingPerformed = false;
 
     const existingListIds = new Set(listsSnapshot.docs.map(doc => doc.id));
 
-    // 1. Seed System Lists
     const systemListsToCreate = [
         { id: 'all', data: { name: 'All Contacts', isSystemList: true, isMasterList: true } },
         { id: 'unsubscribes', data: { name: 'Unsubscribes', isSystemList: true } },
@@ -297,7 +283,6 @@ export async function getContactLists(): Promise<ContactList[]> {
         isSeedingPerformed = true;
     }
 
-    // 2. Seed Default User List and Contact
     const userListsExist = listsSnapshot.docs.some(doc => !doc.data().isSystemList);
     let testingListId: string | undefined = listsSnapshot.docs.find(doc => doc.data().name === "Testing")?.id;
 
@@ -308,10 +293,9 @@ export async function getContactLists(): Promise<ContactList[]> {
         isSeedingPerformed = true;
     }
     
-    // Commit any list creations before checking contacts
-    if (isSeedingPerformed && systemListsToCreate.length > 0 || !userListsExist) {
+    if (isSeedingPerformed) {
         await batch.commit();
-        isSeedingPerformed = false; // Reset for next check
+        isSeedingPerformed = false; 
     }
 
     const contactsSnapshot = await contactsCollection.limit(1).get();
@@ -328,12 +312,11 @@ export async function getContactLists(): Promise<ContactList[]> {
         isSeedingPerformed = true;
     }
     
-    // --- Data Fetching and Return ---
     if (isSeedingPerformed) {
-        await updateAllListCounts(); // Ensure counts are correct after seeding
+        await updateAllListCounts();
     }
 
-    listsSnapshot = await listsCollection.get(); // Re-fetch all lists
+    listsSnapshot = await listsCollection.get();
 
     const sortLists = (lists: ContactList[]) => {
         const listOrder: Record<string, number> = { 'all': 1, 'unsubscribes': 2, 'bounces': 3 };
@@ -392,13 +375,11 @@ export async function deleteList(id: string): Promise<void> {
 
     const batch = adminDb.batch();
     
-    // Remove listId from all contacts
     const contactsSnapshot = await adminDb.collection('contacts').where('listIds', 'array-contains', id).get();
     contactsSnapshot.forEach(doc => {
         batch.update(doc.ref, { listIds: FieldValue.arrayRemove(id) });
     });
 
-    // Delete the list document itself
     batch.delete(listRef);
 
     await batch.commit();
@@ -418,10 +399,8 @@ export async function updateContact(contactId: string, data: Partial<Contact>, c
 
     if (oldStatus !== newStatus) {
         if (newStatus === 'Unsubscribed') {
-            // When unsubscribing, remove from all lists and add to the single "unsubscribes" list.
             batch.update(contactRef, { listIds: ['unsubscribes'] });
         } else if (newStatus === 'Subscribed' && oldStatus !== 'Subscribed') {
-            // When re-subscribing, remove from 'unsubscribes'/'bounces' and add to 'all' and the current list.
             batch.update(contactRef, {
                 listIds: FieldValue.arrayUnion('all', currentListId)
             });
@@ -502,7 +481,7 @@ export async function importContacts(data: {
                     subscribedAt: new Date().toISOString(),
                     listIds: ['all', targetListId],
                 };
-                const contactRef = adminDb.collection('contacts').doc(); // new doc
+                const contactRef = adminDb.collection('contacts').doc();
                 batch.set(contactRef, newContact);
                 existingEmails.add(sanitizedEmail);
                 newContactsAddedCount++;
@@ -524,14 +503,106 @@ export async function importContacts(data: {
 
 export async function getSettings(): Promise<Settings> {
     const doc = await adminDb.collection('meta').doc('settings').get();
-    return docWithIdAndTimestamps(doc) as Settings || {};
+    return (docWithIdAndTimestamps(doc) as Settings) || {};
 }
 
 export async function saveSettings(formName: 'profile' | 'defaults' | 'api', data: any) {
-    await adminDb.collection('meta').doc('settings').set({
-        [formName]: data
-    }, { merge: true });
+    const settingsDocRef = adminDb.collection('meta').doc('settings');
+
+    if (formName === 'defaults') {
+        const oldSettings = await getSettings();
+        const oldEmail = oldSettings.defaults?.fromEmail;
+        const newEmail = data.fromEmail;
+
+        if (oldEmail !== newEmail) {
+            if (!oldSettings.api?.resendApiKey) {
+                throw new Error("You must set your Resend API key before you can verify a new email address.");
+            }
+            await settingsDocRef.set({ defaults: { ...data, isVerified: false }}, { merge: true });
+            await sendVerificationEmail(newEmail, oldSettings.api.resendApiKey);
+            return { needsVerification: true };
+        }
+    }
+
+    if (formName === 'profile') {
+        await settingsDocRef.set({ profile: {
+            companyName: data.companyName,
+            address: data.address
+        }, defaults: {
+            fromName: data.fromName
+        }}, { merge: true });
+        return;
+    }
+    
+    await settingsDocRef.set({ [formName]: data }, { merge: true });
 }
+
+export async function sendVerificationEmail(email?: string, apiKey?: string) {
+    let settings: Settings;
+    if (!email || !apiKey) {
+      settings = await getSettings();
+      email = email || settings.defaults?.fromEmail;
+      apiKey = apiKey || settings.api?.resendApiKey;
+    }
+
+    if (!email) throw new Error("No email address set to verify.");
+    if (!apiKey) throw new Error("Resend API Key is not set.");
+    
+    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    const expires = new Date();
+    expires.setHours(expires.getHours() + 24);
+    
+    await adminDb.collection('meta').doc('settings').set({
+        defaults: {
+            verificationCode: code,
+            verificationCodeExpires: expires.toISOString(),
+        }
+    }, { merge: true });
+
+    const resend = new Resend(apiKey);
+    await resend.emails.send({
+        from: 'Ryfi MailFlow <verification@ryfi.me>',
+        to: email,
+        subject: 'Verify Your Ryfi MailFlow Email Address',
+        html: `
+            <div style="font-family: sans-serif; text-align: center; padding: 20px;">
+                <h2>Email Verification</h2>
+                <p>Your verification code is:</p>
+                <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; margin: 20px 0;">${code}</p>
+                <p>This code will expire in 24 hours.</p>
+            </div>
+        `
+    });
+}
+
+export async function verifyEmailCode(code: string): Promise<{success: boolean}> {
+    const settings = await getSettings();
+    const storedCode = settings.defaults?.verificationCode;
+    const expiresStr = settings.defaults?.verificationCodeExpires;
+
+    if (!storedCode || !expiresStr) {
+        throw new Error("No verification process was started. Please request a new code.");
+    }
+
+    if (new Date(expiresStr) < new Date()) {
+        throw new Error("Verification code has expired. Please request a new one.");
+    }
+
+    if (code !== storedCode) {
+        throw new Error("Invalid verification code. Please try again.");
+    }
+
+    await adminDb.collection('meta').doc('settings').set({
+        defaults: {
+            isVerified: true,
+            verificationCode: FieldValue.delete(),
+            verificationCodeExpires: FieldValue.delete()
+        }
+    }, { merge: true });
+    
+    return { success: true };
+}
+
 
 // ==== DASHBOARD & HELPERS ====
 
@@ -550,9 +621,6 @@ async function updateAllListCounts() {
 
 export async function getDashboardData() {
     const [campaignsSnapshot, allContactsListSnapshot] = await Promise.all([
-        // The original query required a composite index. 
-        // This is more flexible and avoids the error, but may be less performant on very large datasets.
-        // For production, creating the Firestore index is the best practice.
         adminDb.collection('campaigns').orderBy('createdAt', 'desc').get(),
         adminDb.collection('lists').doc('all').get()
     ]);
@@ -585,14 +653,11 @@ export async function getDashboardData() {
         const sentDate = new Date(c.sentDate);
         const month = sentDate.getMonth();
         const year = sentDate.getFullYear();
-        const key = `${year}-${month}`; // Use a unique key like YYYY-MM
+        const key = `${year}-${month}`;
         if (!monthlyData[key]) {
           monthlyData[key] = { sent: 0, opened: 0 };
         }
-        //This logic is flawed, as it increments sent for every recipient
-        // monthlyData[key].sent += (c.recipients || 0);
         monthlyData[key].sent += 1;
-        // This is a mock calculation for opened
         const openedCount = Math.round((c.recipients || 0) * (parseFloat(c.openRate) / 100));
         monthlyData[key].opened += openedCount;
       }

@@ -59,6 +59,9 @@ export type Settings = {
     defaults?: {
         fromName: string;
         fromEmail: string;
+        isVerified?: boolean;
+        verificationCode?: string;
+        verificationCodeExpires?: string;
     },
     api?: {
         resendApiKey: string;

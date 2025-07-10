@@ -42,8 +42,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { getCampaignById, getContactLists, getSettings, saveCampaign, saveTemplate } from "@/lib/actions";
-import type { ContactList, Settings } from "@/lib/types";
+import { getCampaignById, getContactLists, saveCampaign, saveTemplate } from "@/lib/actions";
+import type { ContactList } from "@/lib/types";
+import { useSettings } from "@/contexts/settings-context";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 const campaignFormSchema = z.object({
@@ -54,8 +56,6 @@ const campaignFormSchema = z.object({
   scheduledAt: z.date().optional(),
   emailBackgroundColor: z.string().optional(),
 }).superRefine((data, ctx) => {
-    // This refine logic only runs when validation is triggered (on send/schedule).
-    // It doesn't run when saving a draft, as we don't trigger validation then.
     if (data.name.length < 3) {
         ctx.addIssue({
             code: z.ZodIssueCode.too_small,
@@ -188,6 +188,7 @@ export default function NewCampaignPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const { isSetupComplete } = useSettings();
   
   const [campaignId, setCampaignId] = React.useState<string | null>(null);
   const [date, setDate] = React.useState<Date>();
@@ -432,7 +433,6 @@ export default function NewCampaignPage() {
   const handleEditorClick = (e: React.MouseEvent<HTMLDivElement>) => {
     const target = e.target as HTMLElement;
 
-    // Let browser handle image selection and resizing.
     if (target.tagName === 'IMG') {
         return;
     }
@@ -491,7 +491,7 @@ export default function NewCampaignPage() {
     
     let finalData: any = {
         ...data,
-        id: campaignId, // if null, a new one will be created by the action
+        id: campaignId,
         status: status,
     };
     
@@ -500,7 +500,6 @@ export default function NewCampaignPage() {
 
         if (result.error) {
              toast({ variant: "destructive", title: "Error", description: result.error });
-             // If sending failed, revert status to Draft
              if (status === 'Sent') {
                 finalData.status = 'Draft';
                 await saveCampaign(finalData);
@@ -508,7 +507,7 @@ export default function NewCampaignPage() {
              }
         } else {
             const action = status === 'Draft' ? 'saved as a draft' : (status === 'Scheduled' ? 'scheduled' : 'sent');
-            toast({ title: `Campaign ${campaignId ? 'Updated' : 'Created'}!`, description: `Your email campaign has been successfully ${action}.` });
+            toast({ title: `Campaign ${campaignId ? 'Updated' : 'Created'}!`, description: result.success || `Your email campaign has been successfully ${action}.` });
             router.push('/campaigns');
         }
 
@@ -543,6 +542,7 @@ export default function NewCampaignPage() {
   };
 
   const pageTitle = campaignId ? "Edit Campaign" : "New Campaign";
+  const sendButtonDisabled = isSending || !isSetupComplete;
 
   return (
     <Form {...form}>
@@ -565,14 +565,27 @@ export default function NewCampaignPage() {
                 <CalendarComponent mode="single" selected={date} onSelect={setDate} initialFocus />
               </PopoverContent>
             </Popover>
-            <Button type="button" onClick={handleSendOrSchedule} className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={isSending}>
-              {isSending ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Send className="mr-2 h-4 w-4" />
-              )}
-              {isSending ? 'Sending...' : (date ? "Schedule" : "Send Now")}
-            </Button>
+            <TooltipProvider>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <span tabIndex={0}>
+                           <Button type="button" onClick={handleSendOrSchedule} className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={sendButtonDisabled}>
+                              {isSending ? (
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="mr-2 h-4 w-4" />
+                              )}
+                              {isSending ? 'Sending...' : (date ? "Schedule" : "Send Now")}
+                            </Button>
+                        </span>
+                    </TooltipTrigger>
+                    {!isSetupComplete && (
+                        <TooltipContent>
+                            <p>Please complete your account setup in Settings to send campaigns.</p>
+                        </TooltipContent>
+                    )}
+                </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
 
