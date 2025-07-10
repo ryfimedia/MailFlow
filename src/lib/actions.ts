@@ -347,7 +347,7 @@ export async function deleteOptInForm(id: string) {
     await adminDb.collection('optInForms').doc(id).delete();
 }
 
-export async function addContactFromForm(data: { formId: string, email: string, firstName?: string, lastName?: string }) {
+export async function addContactFromForm(data: { formId: string, email: string, firstName?: string, lastName?: string, phone?: string, company?: string }) {
     const form = await getOptInFormById(data.formId);
     if (!form) {
         return { error: 'Form not found.' };
@@ -369,6 +369,8 @@ export async function addContactFromForm(data: { formId: string, email: string, 
         email,
         firstName: data.firstName || '',
         lastName: data.lastName || '',
+        phone: data.phone || '',
+        company: data.company || '',
         status: 'Subscribed',
         subscribedAt: new Date().toISOString(),
         listIds: [form.contactListId, 'all'],

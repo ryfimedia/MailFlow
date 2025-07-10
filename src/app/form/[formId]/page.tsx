@@ -10,7 +10,6 @@ import * as z from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Rocket, PartyPopper } from 'lucide-react';
@@ -33,6 +32,8 @@ export default function PublicFormPage() {
       email: z.string().email({ message: "Please enter a valid email." }),
       firstName: formDetails?.fields.firstName ? z.string().min(1, 'First name is required.') : z.string().optional(),
       lastName: formDetails?.fields.lastName ? z.string().min(1, 'Last name is required.') : z.string().optional(),
+      phone: formDetails?.fields.phone ? z.string().min(1, 'Phone is required.') : z.string().optional(),
+      company: formDetails?.fields.company ? z.string().min(1, 'Company is required.') : z.string().optional(),
     });
   }, [formDetails]);
 
@@ -40,7 +41,7 @@ export default function PublicFormPage() {
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
-    defaultValues: { email: "", firstName: "", lastName: "" },
+    defaultValues: { email: "", firstName: "", lastName: "", phone: "", company: "" },
   });
 
   React.useEffect(() => {
@@ -75,6 +76,8 @@ export default function PublicFormPage() {
             email: data.email,
             firstName: data.firstName,
             lastName: data.lastName,
+            phone: data.phone,
+            company: data.company,
         });
 
         if (result.error) {
@@ -144,6 +147,18 @@ export default function PublicFormPage() {
                         )} />
                     )}
                     
+                    {formDetails.fields.phone && (
+                        <FormField control={form.control} name="phone" render={({ field }) => (
+                            <FormItem><FormLabel>Phone</FormLabel><FormControl><Input placeholder="(555) 123-4567" {...field} type="tel" /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    )}
+
+                    {formDetails.fields.company && (
+                        <FormField control={form.control} name="company" render={({ field }) => (
+                            <FormItem><FormLabel>Company</FormLabel><FormControl><Input placeholder="Acme Inc." {...field} /></FormControl><FormMessage /></FormItem>
+                        )} />
+                    )}
+                    
                     <Button type="submit" className="w-full" disabled={loading}>{formDetails.buttonText}</Button>
                 </form>
             </Form>
@@ -153,4 +168,3 @@ export default function PublicFormPage() {
     </div>
   );
 }
-

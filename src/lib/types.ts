@@ -96,6 +96,8 @@ export type OptInForm = {
     fields: {
         firstName: boolean;
         lastName: boolean;
+        phone: boolean;
+        company: boolean;
     };
     createdAt: string;
     updatedAt: string;

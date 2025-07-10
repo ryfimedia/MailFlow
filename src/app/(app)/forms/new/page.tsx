@@ -36,7 +36,9 @@ const optInFormSchema = z.object({
   fields: z.object({
     firstName: z.boolean().default(false),
     lastName: z.boolean().default(false),
-  }).default({ firstName: false, lastName: false }),
+    phone: z.boolean().default(false),
+    company: z.boolean().default(false),
+  }).default({ firstName: true, lastName: false, phone: false, company: false }),
 });
 
 type OptInFormValues = z.infer<typeof optInFormSchema>;
@@ -62,6 +64,8 @@ export default function NewOptInFormPage() {
       fields: {
         firstName: true,
         lastName: false,
+        phone: false,
+        company: false,
       },
     },
   });
@@ -106,6 +110,7 @@ export default function NewOptInFormPage() {
   }
 
   const pageTitle = formId ? "Edit Form" : "New Opt-In Form";
+  const watchedFields = form.watch('fields');
 
   return (
     <Form {...form}>
@@ -194,6 +199,18 @@ export default function NewOptInFormPage() {
                                <div className="space-y-1 leading-none"><FormLabel>Last Name</FormLabel></div>
                             </FormItem>
                         )} />
+                         <FormField control={form.control} name="fields.phone" render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4">
+                               <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                               <div className="space-y-1 leading-none"><FormLabel>Phone</FormLabel></div>
+                            </FormItem>
+                        )} />
+                         <FormField control={form.control} name="fields.company" render={({ field }) => (
+                            <FormItem className="flex flex-row items-center space-x-3 space-y-0 rounded-md border p-4">
+                               <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
+                               <div className="space-y-1 leading-none"><FormLabel>Company</FormLabel></div>
+                            </FormItem>
+                        )} />
                     </CardContent>
                 </Card>
             </div>
@@ -212,16 +229,28 @@ export default function NewOptInFormPage() {
                                     <Label>Email *</Label>
                                     <Input placeholder="you@example.com" readOnly />
                                 </div>
-                                {form.watch('fields.firstName') && (
+                                {watchedFields.firstName && (
                                      <div className="space-y-1">
                                         <Label>First Name</Label>
                                         <Input placeholder="Jane" readOnly />
                                     </div>
                                 )}
-                                {form.watch('fields.lastName') && (
+                                {watchedFields.lastName && (
                                      <div className="space-y-1">
                                         <Label>Last Name</Label>
                                         <Input placeholder="Doe" readOnly />
+                                    </div>
+                                )}
+                                 {watchedFields.phone && (
+                                     <div className="space-y-1">
+                                        <Label>Phone</Label>
+                                        <Input placeholder="(555) 123-4567" readOnly />
+                                    </div>
+                                )}
+                                 {watchedFields.company && (
+                                     <div className="space-y-1">
+                                        <Label>Company</Label>
+                                        <Input placeholder="Acme Inc." readOnly />
                                     </div>
                                 )}
                             </div>
