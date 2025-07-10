@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags, Loader2 } from "lucide-react";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags, Loader2, Sparkles } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -46,6 +46,7 @@ import { getCampaignById, getContactLists, saveCampaign, saveTemplate } from "@/
 import type { ContactList } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 
 
 const campaignFormSchema = z.object({
@@ -217,6 +218,9 @@ export default function NewCampaignPage() {
 
   const [isPageStylePopoverOpen, setIsPageStylePopoverOpen] = React.useState(false);
   const [isSelectionCollapsed, setIsSelectionCollapsed] = React.useState(true);
+
+  const [isGeneratingSubject, setIsGeneratingSubject] = React.useState(false);
+  const [subjectTone, setSubjectTone] = React.useState("Professional");
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -541,6 +545,35 @@ export default function NewCampaignPage() {
     handleFormSubmit(data, 'Draft');
   };
 
+  const handleGenerateSubject = async () => {
+    setIsGeneratingSubject(true);
+    const emailBody = form.getValues("emailBody");
+    const plainTextBody = emailBody.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+
+    if (plainTextBody.length < 20) {
+        toast({ variant: 'destructive', title: "Not enough content", description: "Please write at least 20 characters in the email body to generate a subject." });
+        setIsGeneratingSubject(false);
+        return;
+    }
+
+    try {
+        const result = await generateSubjectLine({
+            emailBody: plainTextBody,
+            tone: subjectTone,
+        });
+        if (result.subjectLine) {
+            form.setValue("subject", result.subjectLine, { shouldValidate: true });
+            toast({ title: "Subject Generated!", description: "A new subject line has been created." });
+        }
+    } catch (error) {
+        console.error("Failed to generate subject line:", error);
+        toast({ variant: 'destructive', title: "AI Error", description: "Could not generate subject line." });
+    } finally {
+        setIsGeneratingSubject(false);
+    }
+  };
+
+
   const pageTitle = campaignId ? "Edit Campaign" : "New Campaign";
   const sendButtonDisabled = isSending || !isSetupComplete;
 
@@ -679,9 +712,27 @@ export default function NewCampaignPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Subject</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Your email subject line" {...field} />
-                      </FormControl>
+                        <div className="flex gap-2">
+                           <FormControl>
+                            <Input placeholder="Your email subject line" {...field} />
+                          </FormControl>
+                          <Select value={subjectTone} onValueChange={setSubjectTone}>
+                            <SelectTrigger className="w-[150px]">
+                                <SelectValue placeholder="Tone" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="Professional">Professional</SelectItem>
+                                <SelectItem value="Casual">Casual</SelectItem>
+                                <SelectItem value="Urgent">Urgent</SelectItem>
+                                <SelectItem value="Friendly">Friendly</SelectItem>
+                                <SelectItem value="Playful">Playful</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button type="button" onClick={handleGenerateSubject} disabled={isGeneratingSubject}>
+                            {isGeneratingSubject ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+                            Generate
+                          </Button>
+                        </div>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -850,7 +901,7 @@ export default function NewCampaignPage() {
                                 onClick={handleEditorClick}
                                 className="email-editor min-h-[400px] w-full rounded-b-md border-0 p-4 text-base ring-offset-background text-black placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
                                 placeholder="Write your email here..."
-                                style={{ backgroundColor: '#ffffff' }}
+                                style={{ backgroundColor: emailBackgroundColor || '#ffffff' }}
                               />
                           </FormControl>
                         </div>

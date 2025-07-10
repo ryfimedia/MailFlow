@@ -4,7 +4,7 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from "recharts";
-import { ArrowUpRight, Users, Mail, BarChart2, Rocket } from "lucide-react";
+import { Users, Mail, BarChart2, Rocket } from "lucide-react";
 import { ChartTooltipContent, ChartContainer } from "@/components/ui/chart";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,7 @@ const chartConfig = {
   },
 };
 
-const StatCard = ({ title, value, icon: Icon, change, changeType }: { title: string, value: string | number, icon: React.ElementType, change?: string, changeType?: 'increase' | 'decrease' }) => (
+const StatCard = ({ title, value, icon: Icon, description }: { title: string, value: string | number, icon: React.ElementType, description?: string }) => (
   <Card>
     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
       <CardTitle className="text-sm font-medium">{title}</CardTitle>
@@ -33,10 +33,9 @@ const StatCard = ({ title, value, icon: Icon, change, changeType }: { title: str
     </CardHeader>
     <CardContent>
       <div className="text-2xl font-bold">{value}</div>
-      {change && (
-        <p className="text-xs text-muted-foreground flex items-center">
-          <ArrowUpRight className={`h-4 w-4 mr-1 ${changeType === 'decrease' ? 'text-red-500 rotate-90' : 'text-green-500'}`} />
-          {change}
+      {description && (
+        <p className="text-xs text-muted-foreground">
+          {description}
         </p>
       )}
     </CardContent>
@@ -91,10 +90,10 @@ export default function Dashboard() {
     <div className="space-y-8">
       <h1 className="text-3xl font-bold font-headline">Dashboard</h1>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Total Subscribers" value={totalSubscribers.toLocaleString()} icon={Users} change="+201 this month" changeType="increase" />
-        <StatCard title="Average Open Rate" value={avgOpenRate} icon={Mail} change="+2.1% MoM" changeType="increase" />
-        <StatCard title="Average Click Rate" value={avgClickRate} icon={BarChart2} change="-0.5% MoM" changeType="decrease" />
-        <StatCard title="Campaigns Sent" value={campaignsSent} icon={Rocket} change="in the last 30 days" />
+        <StatCard title="Total Subscribers" value={totalSubscribers.toLocaleString()} icon={Users} />
+        <StatCard title="Average Open Rate" value={avgOpenRate} icon={Mail} />
+        <StatCard title="Average Click Rate" value={avgClickRate} icon={BarChart2} />
+        <StatCard title="Campaigns Sent" value={campaignsSent} icon={Rocket} description="in the last 30 days" />
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">

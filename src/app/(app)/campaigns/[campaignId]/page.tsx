@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft, Users, MailOpen, MousePointerClick, TrendingUp, XCircle, Download } from "lucide-react";
 import React from "react";
+import Papa from "papaparse";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -51,11 +52,35 @@ export default function CampaignStatsPage() {
     }, [campaignId, toast]);
 
     const handleExport = () => {
+        if (!campaign) return;
+
+        const statsData = [
+            { Metric: "Campaign Name", Value: campaign.name },
+            { Metric: "Subject", Value: campaign.subject },
+            { Metric: "Sent Date", Value: campaign.sentDate ? new Date(campaign.sentDate).toISOString() : "N/A" },
+            { Metric: "Open Rate", Value: campaign.openRate },
+            { Metric: "Click Rate", Value: campaign.clickRate },
+            { Metric: "Recipients", Value: campaign.recipients },
+            { Metric: "Successful Deliveries", Value: campaign.successfulDeliveries },
+            { Metric: "Bounces", Value: campaign.bounces },
+            { Metric: "Unsubscribes", Value: campaign.unsubscribes },
+        ];
+
+        const csv = Papa.unparse(statsData);
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        const safeName = campaign.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        link.setAttribute("download", `campaign_stats_${safeName}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
         toast({
             title: "Exporting stats...",
             description: "Your CSV file will be downloaded shortly.",
         });
-        console.log("Exporting stats for campaign:", campaign?.name);
     }
 
     if (campaign === undefined) {
