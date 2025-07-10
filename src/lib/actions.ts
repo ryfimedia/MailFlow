@@ -779,7 +779,11 @@ export async function importContacts(data: {
 // ==== SETTINGS ====
 
 export async function getSettings(): Promise<Settings> {
-    const userDb = await getDb();
+    const userId = await getUserIdFromSession();
+    if (!userId) {
+        return {}; // Return empty settings if not authenticated
+    }
+    const userDb = admin.firestore().collection('users').doc(userId);
     const doc = await userDb.collection('meta').doc('settings').get();
     return (docWithIdAndTimestamps(doc) as Settings) || {};
 }
