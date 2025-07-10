@@ -1,4 +1,6 @@
 
+'use server';
+
 import admin from 'firebase-admin';
 
 // This guard prevents re-initializing the app on hot reloads.

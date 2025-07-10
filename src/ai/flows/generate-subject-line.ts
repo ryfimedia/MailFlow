@@ -27,13 +27,13 @@ const GenerateSubjectLineInputSchema = z.object({
     .describe('Comma-separated keywords to include in the subject line.'),
 });
 
-export type GenerateSubjectLineInput = z.infer<typeof GenerateSubjectLineInputSchema>;
+type GenerateSubjectLineInput = z.infer<typeof GenerateSubjectLineInputSchema>;
 
 const GenerateSubjectLineOutputSchema = z.object({
   subjectLine: z.string().describe('The generated subject line.'),
 });
 
-export type GenerateSubjectLineOutput = z.infer<typeof GenerateSubjectLineOutputSchema>;
+type GenerateSubjectLineOutput = z.infer<typeof GenerateSubjectLineOutputSchema>;
 
 export async function generateSubjectLine(
   input: GenerateSubjectLineInput

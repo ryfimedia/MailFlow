@@ -49,7 +49,12 @@ const storage = admin.storage();
 export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) => {
     logger.log("Starting unused image cleanup task.");
 
-    const bucket = storage.bucket();
+    const bucketName = admin.app().options.storageBucket;
+    if (!bucketName) {
+        logger.error("Storage bucket name not found in function configuration. Aborting cleanup.");
+        return null;
+    }
+    const bucket = storage.bucket(bucketName);
 
     // 1. Get all campaigns updated in the last 365 days.
     const oneYearAgo = new Date();

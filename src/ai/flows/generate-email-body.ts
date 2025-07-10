@@ -22,13 +22,13 @@ const GenerateEmailBodyInputSchema = z.object({
     ),
 });
 
-export type GenerateEmailBodyInput = z.infer<typeof GenerateEmailBodyInputSchema>;
+type GenerateEmailBodyInput = z.infer<typeof GenerateEmailBodyInputSchema>;
 
 const GenerateEmailBodyOutputSchema = z.object({
   htmlContent: z.string().describe('The generated email body as a complete HTML string with inline styles.'),
 });
 
-export type GenerateEmailBodyOutput = z.infer<typeof GenerateEmailBodyOutputSchema>;
+type GenerateEmailBodyOutput = z.infer<typeof GenerateEmailBodyOutputSchema>;
 
 export async function generateEmailBody(
   input: GenerateEmailBodyInput
