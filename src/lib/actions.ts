@@ -1,22 +1,18 @@
 
 'use server';
 
-import { adminDb } from './firebase-admin';
+import { adminDb, adminStorage } from './firebase-admin';
 import { z } from 'zod';
 import { Resend } from 'resend';
 import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign, OptInForm } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
-import { getStorage } from 'firebase-admin/storage';
 import admin from 'firebase-admin';
 
 const FREE_TIER_DAILY_LIMIT = 100;
 
 function getBucket() {
-    const serviceAccountString = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64!, 'base64').toString('utf-8');
-    const serviceAccount = JSON.parse(serviceAccountString);
-    const bucketName = `${serviceAccount.project_id}.appspot.com`;
-    return getStorage().bucket(bucketName);
+    return adminStorage.bucket();
 }
 
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
