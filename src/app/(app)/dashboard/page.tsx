@@ -1,6 +1,4 @@
 
-"use client";
-
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from "recharts";
@@ -10,7 +8,6 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Skeleton } from "@/components/ui/skeleton";
 import { getDashboardData } from "@/lib/actions";
 import type { Campaign } from "@/lib/types";
 
@@ -42,49 +39,15 @@ const StatCard = ({ title, value, icon: Icon, description }: { title: string, va
   </Card>
 );
 
-export default function Dashboard() {
-  const [loading, setLoading] = React.useState(true);
-  const [totalSubscribers, setTotalSubscribers] = React.useState(0);
-  const [avgOpenRate, setAvgOpenRate] = React.useState('0.0%');
-  const [avgClickRate, setAvgClickRate] = React.useState('0.0%');
-  const [campaignsSent, setCampaignsSent] = React.useState(0);
-  const [recentCampaigns, setRecentCampaigns] = React.useState<Campaign[]>([]);
-  const [chartData, setChartData] = React.useState<any[]>([]);
-
-  React.useEffect(() => {
-    async function fetchData() {
-      try {
-        const data = await getDashboardData();
-        setTotalSubscribers(data.totalSubscribers);
-        setAvgOpenRate(data.avgOpenRate);
-        setAvgClickRate(data.avgClickRate);
-        setCampaignsSent(data.campaignsSentLast30Days);
-        setRecentCampaigns(data.recentCampaigns);
-        setChartData(data.chartData);
-      } catch (error) {
-        console.error("Failed to load dashboard data", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold font-headline">Dashboard</h1>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-          <Skeleton className="h-28" />
-        </div>
-        <Skeleton className="h-[400px]" />
-        <Skeleton className="h-[300px]" />
-      </div>
-    );
-  }
+export default async function Dashboard() {
+  const {
+    totalSubscribers,
+    avgOpenRate,
+    avgClickRate,
+    campaignsSent,
+    recentCampaigns,
+    chartData
+  } = await getDashboardData();
 
   return (
     <div className="space-y-8">
