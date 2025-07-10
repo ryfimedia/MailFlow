@@ -24,7 +24,6 @@ export type Campaign = {
 
 export type Contact = {
     id: string;
-    uid?: string;
     firstName: string;
     lastName: string;
     email: string;
@@ -62,7 +61,6 @@ export type Settings = {
     defaults?: {
         fromName: string;
         fromEmail: string;
-        isVerified?: boolean;
     },
     api?: {
         resendApiKey: string;
