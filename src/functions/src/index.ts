@@ -33,6 +33,7 @@ type Contact = {
     lastName?: string;
     status: 'Subscribed' | 'Unsubscribed' | 'Bounced';
     subscribedAt: string; // ISO string
+    listIds: string[];
 };
 
 
@@ -61,7 +62,7 @@ export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) =>
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
     const campaignsSnapshot = await db
-      .collection("campaigns")
+      .collectionGroup("campaigns") // Query across all users
       .where("updatedAt", ">", oneYearAgo)
       .get();
 
@@ -84,8 +85,8 @@ export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) =>
 
     logger.log(`Found ${usedImageUrls.size} unique image URLs used in recent campaigns.`);
 
-    // 3. Get all files from the storage bucket.
-    const [files] = await bucket.getFiles({ prefix: "campaign-images/" });
+    // 3. Get all files from the storage bucket across all users.
+    const [files] = await bucket.getFiles({ prefix: "users/" });
     
     let deletedCount = 0;
 
@@ -135,105 +136,112 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
     if (!baseUrl) {
       logger.error("NEXT_PUBLIC_BASE_URL is not set in environment variables. Unsubscribe links will be incorrect.");
-      return null;
+      // We don't return here because we can still attempt to send, the links will just be broken.
     }
 
-    const settingsDoc = await db.collection("meta").doc("settings").get();
-    const settings = settingsDoc.data() || {};
-    
-    const fromName = settings.defaults?.fromName || "Your Company";
-    const fromEmail = settings.defaults?.fromEmail || "noreply@yourdomain.com";
-    const companyName = settings.profile?.companyName || "Your Company Name";
-    const companyAddress = settings.profile?.address || "Your Physical Address";
+    const allUsers = await db.collection('users').get();
 
-    const activeDripCampaigns = await db
-      .collection("dripCampaigns")
-      .where("status", "==", "Active")
-      .get();
+    for (const userDoc of allUsers.docs) {
+        const userId = userDoc.id;
+        const userDb = db.collection('users').doc(userId);
 
-    if (activeDripCampaigns.empty) {
-      logger.log("No active drip campaigns found.");
-      return null;
-    }
-
-    for (const campaignDoc of activeDripCampaigns.docs) {
-      const campaign = campaignDoc.data() as DripCampaign;
-      const campaignName = campaign.name;
-      const listId = campaign.contactListId;
-      const emails = campaign.emails || [];
-
-      if (!listId || emails.length === 0) {
-        logger.warn(`Campaign "${campaignName}" (ID: ${campaignDoc.id}) is invalid or has no emails, skipping.`);
-        continue;
-      }
-      
-      logger.log(`Processing campaign: "${campaignName}" for list ID: ${listId}`);
-
-      const contactsSnapshot = await db
-        .collection("contacts")
-        .where("listIds", "array-contains", listId)
-        .where("status", "==", "Subscribed")
-        .get();
-
-      if (contactsSnapshot.empty) {
-        logger.log(`No subscribed contacts found for list ${listId} in campaign "${campaignName}".`);
-        continue;
-      }
-
-      for (const contactDoc of contactsSnapshot.docs) {
-        const contact = { ...contactDoc.data(), id: contactDoc.id } as Contact;
+        const settingsDoc = await userDb.collection("meta").doc("settings").get();
+        const settings = settingsDoc.data() || {};
         
-        try {
-          const subscribedDate = new Date(contact.subscribedAt);
-          subscribedDate.setUTCHours(0, 0, 0, 0);
-          
-          const today = new Date();
-          today.setUTCHours(0, 0, 0, 0);
-          
-          const timeDiff = today.getTime() - subscribedDate.getTime();
-          const daysSinceSubscription = Math.round(timeDiff / (1000 * 60 * 60 * 24));
+        const fromName = settings.defaults?.fromName || "Your Company";
+        const fromEmail = settings.defaults?.fromEmail || "noreply@yourdomain.com";
+        const companyName = settings.profile?.companyName || "Your Company Name";
+        const companyAddress = settings.profile?.address || "Your Physical Address";
 
-          const emailToSend = emails.find((e) => e.delayDays === daysSinceSubscription);
+        const activeDripCampaigns = await userDb
+          .collection("dripCampaigns")
+          .where("status", "==", "Active")
+          .get();
 
-          if (emailToSend) {
-            logger.log(`Matched day ${daysSinceSubscription} for ${contact.email} in campaign "${campaignName}". Preparing to send.`);
-            
-            let personalizedBody = emailToSend.body
-              .replace(/\[FirstName\]/g, contact.firstName || '')
-              .replace(/\[LastName\]/g, contact.lastName || '')
-              .replace(/\[Email\]/g, contact.email || '');
-
-            const listUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
-            const allUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&all=true`;
-                
-            const footer = `
-                <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-                    <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
-                    <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-                    <p style="margin: 0;">
-                        <a href="${listUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
-                        <span style="padding: 0 5px;">|</span>
-                        <a href="${allUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
-                    </p>
-                </div>
-            `;
-            
-            const fullHtml = personalizedBody + footer;
-
-            await resend.emails.send({
-              from: `${fromName} <${fromEmail}>`,
-              to: [contact.email],
-              subject: emailToSend.subject,
-              html: fullHtml,
-            });
-            logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
-          }
-        } catch (error) {
-          logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error as any);
+        if (activeDripCampaigns.empty) {
+          logger.log(`No active drip campaigns found for user ${userId}.`);
+          continue;
         }
-      }
+
+        for (const campaignDoc of activeDripCampaigns.docs) {
+          const campaign = campaignDoc.data() as DripCampaign;
+          const campaignName = campaign.name;
+          const listId = campaign.contactListId;
+          const emails = campaign.emails || [];
+
+          if (!listId || emails.length === 0) {
+            logger.warn(`Campaign "${campaignName}" (ID: ${campaignDoc.id}) for user ${userId} is invalid or has no emails, skipping.`);
+            continue;
+          }
+          
+          logger.log(`Processing campaign: "${campaignName}" for user ${userId} on list ID: ${listId}`);
+
+          const contactsSnapshot = await userDb
+            .collection("contacts")
+            .where("listIds", "array-contains", listId)
+            .where("status", "==", "Subscribed")
+            .get();
+
+          if (contactsSnapshot.empty) {
+            logger.log(`No subscribed contacts found for list ${listId} in campaign "${campaignName}".`);
+            continue;
+          }
+
+          for (const contactDoc of contactsSnapshot.docs) {
+            const contact = { ...contactDoc.data(), id: contactDoc.id } as Contact;
+            
+            try {
+              const subscribedDate = new Date(contact.subscribedAt);
+              subscribedDate.setUTCHours(0, 0, 0, 0);
+              
+              const today = new Date();
+              today.setUTCHours(0, 0, 0, 0);
+              
+              const timeDiff = today.getTime() - subscribedDate.getTime();
+              const daysSinceSubscription = Math.round(timeDiff / (1000 * 60 * 60 * 24));
+
+              const emailToSend = emails.find((e) => e.delayDays === daysSinceSubscription);
+
+              if (emailToSend) {
+                logger.log(`Matched day ${daysSinceSubscription} for ${contact.email} in campaign "${campaignName}". Preparing to send.`);
+                
+                let personalizedBody = emailToSend.body
+                  .replace(/\[FirstName\]/g, contact.firstName || '')
+                  .replace(/\[LastName\]/g, contact.lastName || '')
+                  .replace(/\[Email\]/g, contact.email || '');
+
+                const listUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
+                const allUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&all=true`;
+                    
+                const footer = `
+                    <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+                        <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+                        <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+                        <p style="margin: 0;">
+                            <a href="${listUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+                            <span style="padding: 0 5px;">|</span>
+                            <a href="${allUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
+                        </p>
+                    </div>
+                `;
+                
+                const fullHtml = personalizedBody + footer;
+
+                await resend.emails.send({
+                  from: `${fromName} <${fromEmail}>`,
+                  to: [contact.email],
+                  subject: emailToSend.subject,
+                  html: fullHtml,
+                });
+                logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
+              }
+            } catch (error) {
+              logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error as any);
+            }
+          }
+        }
     }
     
-    logger.log("Drip campaign processing finished.");
+    logger.log("Drip campaign processing finished for all users.");
     return null;
   });
