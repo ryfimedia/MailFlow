@@ -43,7 +43,7 @@ const storage = admin.storage();
  */
 export const cleanupUnusedImages = functions.pubsub
   .schedule("every 24 hours")
-  .onRun(async (context: functions.EventContext) => {
+  .onRun(async (context) => {
     functions.logger.log("Starting unused image cleanup task.");
 
     const BUCKET_NAME = process.env.GCLOUD_PROJECT + ".appspot.com";
@@ -99,7 +99,7 @@ export const cleanupUnusedImages = functions.pubsub
             await file.delete();
             functions.logger.log(`Deleted unused image: ${file.name}`);
             deletedCount++;
-          } catch (error: any) {
+          } catch (error) {
             functions.logger.error(`Failed to delete ${file.name}:`, error);
           }
         }
@@ -117,7 +117,7 @@ export const cleanupUnusedImages = functions.pubsub
  */
 export const processDripCampaigns = functions.pubsub
   .schedule("every 24 hours")
-  .onRun(async (context: functions.EventContext) => {
+  .onRun(async (context) => {
     functions.logger.log("Starting drip campaign processing task.");
 
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -214,7 +214,7 @@ export const processDripCampaigns = functions.pubsub
             });
             functions.logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
           }
-        } catch (error: any) {
+        } catch (error) {
           functions.logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error);
         }
       }
