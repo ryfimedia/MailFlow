@@ -7,9 +7,7 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_BASE_URL: process.env.URL,
   },
   experimental: {
-    allowedDevOrigins: [
-    'https://6000-firebase-studio-1752079772530.cluster-pb4ljhlmg5hqsxnzpc56r3prxw.cloudworkstations.dev',
-  ],
+    
   },
   typescript: {
     ignoreBuildErrors: true,
