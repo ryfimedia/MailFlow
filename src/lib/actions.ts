@@ -347,6 +347,41 @@ export async function deleteOptInForm(id: string) {
     await adminDb.collection('optInForms').doc(id).delete();
 }
 
+export async function addContactFromForm(data: { formId: string, email: string, firstName?: string, lastName?: string }) {
+    const form = await getOptInFormById(data.formId);
+    if (!form) {
+        return { error: 'Form not found.' };
+    }
+
+    const email = data.email.trim().toLowerCase();
+    const existingContactQuery = await adminDb.collection('contacts').where('email', '==', email).limit(1).get();
+
+    if (!existingContactQuery.empty) {
+        const existingContactDoc = existingContactQuery.docs[0];
+        await existingContactDoc.ref.update({
+            listIds: FieldValue.arrayUnion(form.contactListId, 'all'),
+            status: 'Subscribed'
+        });
+        return { success: true, contactId: existingContactDoc.id };
+    }
+
+    const newContact: Omit<Contact, 'id'> = {
+        email,
+        firstName: data.firstName || '',
+        lastName: data.lastName || '',
+        status: 'Subscribed',
+        subscribedAt: new Date().toISOString(),
+        listIds: [form.contactListId, 'all'],
+    };
+
+    const newContactRef = await adminDb.collection('contacts').add(newContact);
+    
+    await updateAllListCounts();
+
+    return { success: true, contactId: newContactRef.id };
+}
+
+
 // ==== CONTACTS & LISTS ====
 
 export async function getContactLists(): Promise<ContactList[]> {
@@ -616,7 +651,25 @@ export async function getSettings(): Promise<Settings> {
 
 export async function saveSettings(data: Partial<Settings>) {
     const settingsDocRef = adminDb.collection('meta').doc('settings');
-    await settingsDocRef.set(data, { merge: true });
+    
+    // To prevent accidentally wiping out parts of the settings,
+    // we fetch the existing settings and merge them with the new data.
+    const currentSettings = await getSettings();
+
+    const newSettings: Settings = {
+        ...currentSettings,
+        ...data,
+        profile: {
+            ...currentSettings.profile,
+            ...data.profile,
+        },
+        defaults: {
+            ...currentSettings.defaults,
+            ...data.defaults,
+        },
+    };
+    
+    await settingsDocRef.set(newSettings, { merge: true });
 }
 
 
