@@ -26,7 +26,6 @@ import {
   LayoutTemplate,
   Image,
 } from "lucide-react";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
@@ -113,15 +112,9 @@ export default function AppLayout({
           </SidebarMenu>
         </SidebarContent>
         <SidebarFooter>
-          <div className="flex items-center gap-3">
-            <Avatar>
-              <AvatarImage src="https://placehold.co/40x40" data-ai-hint="profile picture"/>
-              <AvatarFallback>U</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold">User</span>
-              <span className="text-xs text-muted-foreground">user@email.com</span>
-            </div>
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold">User</span>
+            <span className="text-xs text-muted-foreground">user@email.com</span>
           </div>
         </SidebarFooter>
       </Sidebar>
