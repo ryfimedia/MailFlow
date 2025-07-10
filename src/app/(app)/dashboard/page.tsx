@@ -1,26 +1,13 @@
 
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar } from "recharts";
 import { Users, Mail, BarChart2, Rocket } from "lucide-react";
-import { ChartTooltipContent, ChartContainer } from "@/components/ui/chart";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getDashboardData } from "@/lib/actions";
-import type { Campaign } from "@/lib/types";
-
-const chartConfig = {
-  sent: {
-    label: "Sent",
-    color: "hsl(var(--primary))",
-  },
-  opened: {
-    label: "Opened",
-    color: "hsl(var(--accent))",
-  },
-};
+import { DashboardChart } from "./dashboard-client";
 
 const StatCard = ({ title, value, icon: Icon, description }: { title: string, value: string | number, icon: React.ElementType, description?: string }) => (
   <Card>
@@ -60,33 +47,7 @@ export default async function Dashboard() {
       </div>
 
       <div className="grid gap-8 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle className="font-headline">Campaign Performance</CardTitle>
-             <CardDescription>Monthly overview of sent vs. opened emails.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
-              <BarChart data={chartData} accessibilityLayer>
-                <CartesianGrid vertical={false} />
-                <XAxis
-                  dataKey="month"
-                  tickLine={false}
-                  tickMargin={10}
-                  axisLine={false}
-                  stroke="hsl(var(--muted-foreground))"
-                />
-                <YAxis stroke="hsl(var(--muted-foreground))" allowDecimals={false} />
-                <Tooltip
-                  cursor={false}
-                  content={<ChartTooltipContent indicator="dot" />}
-                />
-                <Bar dataKey="sent" fill="var(--color-sent)" radius={4} />
-                <Bar dataKey="opened" fill="var(--color-opened)" radius={4} />
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+        <DashboardChart chartData={chartData} />
 
         <Card>
           <CardHeader>
