@@ -68,6 +68,7 @@ export default function AppLayout({
   ];
 
   return (
+    <SettingsProvider>
       <SidebarProvider>
         <Sidebar>
           <SidebarHeader>
@@ -109,7 +110,6 @@ export default function AppLayout({
             </SidebarMenu>
           </SidebarContent>
         </Sidebar>
-        <SettingsProvider>
           <SidebarInset>
               <header className="flex items-center justify-between p-4 bg-background border-b md:justify-end">
               <SidebarTrigger className="md:hidden" />
@@ -120,7 +120,7 @@ export default function AppLayout({
               <SetupBanner />
               <main className="p-4 md:p-6 lg:p-8">{children}</main>
           </SidebarInset>
-        </SettingsProvider>
       </SidebarProvider>
+    </SettingsProvider>
   );
 }
