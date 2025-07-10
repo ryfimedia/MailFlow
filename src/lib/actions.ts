@@ -8,8 +8,16 @@ import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, Dr
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
 import { getStorage } from 'firebase-admin/storage';
+import admin from 'firebase-admin';
 
 const FREE_TIER_DAILY_LIMIT = 100;
+
+function getBucket() {
+    const serviceAccountString = Buffer.from(process.env.FIREBASE_SERVICE_ACCOUNT_BASE64!, 'base64').toString('utf-8');
+    const serviceAccount = JSON.parse(serviceAccountString);
+    const bucketName = `${serviceAccount.project_id}.appspot.com`;
+    return getStorage().bucket(bucketName);
+}
 
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
     if (!doc.exists) return null;
@@ -764,7 +772,7 @@ export async function uploadImage(formData: FormData): Promise<{ url?: string; e
             return { error: 'No image file found.' };
         }
 
-        const bucket = getStorage().bucket();
+        const bucket = getBucket();
         const fileName = `${Date.now()}-${imageFile.name.replace(/\s/g, '_')}`;
         const file = bucket.file(`campaign-images/${fileName}`);
 
@@ -788,7 +796,7 @@ export async function uploadImage(formData: FormData): Promise<{ url?: string; e
 // ==== MEDIA ====
 export async function getMediaImages(): Promise<MediaImage[]> {
     try {
-        const bucket = getStorage().bucket();
+        const bucket = getBucket();
         const [files] = await bucket.getFiles({ prefix: 'campaign-images/' });
 
         if (files.length === 0) return [];
@@ -820,7 +828,7 @@ export async function getMediaImages(): Promise<MediaImage[]> {
 
 export async function deleteMediaImage(fileName: string): Promise<{ success: boolean; error?: string }> {
     try {
-        const bucket = getStorage().bucket();
+        const bucket = getBucket();
         await bucket.file(fileName).delete();
         return { success: true };
     } catch (error: any) {
