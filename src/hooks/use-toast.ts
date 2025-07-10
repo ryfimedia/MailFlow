@@ -1,3 +1,4 @@
+
 "use client"
 
 // Inspired by react-hot-toast library
@@ -9,13 +10,15 @@ import type {
 } from "@/components/ui/toast"
 
 const TOAST_LIMIT = 1
-const TOAST_REMOVE_DELAY = 1000000
+const TOAST_REMOVE_DELAY = 5000 // Set a reasonable auto-dismiss time
 
 type ToasterToast = ToastProps & {
   id: string
   title?: React.ReactNode
   description?: React.ReactNode
   action?: ToastActionElement
+  onClose?: () => void;
+  onAutoClose?: () => void;
 }
 
 const actionTypes = {
@@ -65,6 +68,10 @@ const addToRemoveQueue = (toastId: string) => {
 
   const timeout = setTimeout(() => {
     toastTimeouts.delete(toastId)
+    const toastToClose = memoryState.toasts.find(t => t.id === toastId);
+    if (toastToClose?.onAutoClose) {
+        toastToClose.onAutoClose();
+    }
     dispatch({
       type: "REMOVE_TOAST",
       toastId: toastId,
@@ -93,12 +100,17 @@ export const reducer = (state: State, action: Action): State => {
     case "DISMISS_TOAST": {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
       if (toastId) {
+        const toastToClose = state.toasts.find(t => t.id === toastId);
+        if (toastToClose?.onClose) {
+            toastToClose.onClose();
+        }
         addToRemoveQueue(toastId)
       } else {
         state.toasts.forEach((toast) => {
+           if (toast.onClose) {
+                toast.onClose();
+            }
           addToRemoveQueue(toast.id)
         })
       }
@@ -163,6 +175,12 @@ function toast({ ...props }: Toast) {
       },
     },
   })
+  
+  // Automatically dismiss after a delay
+  setTimeout(() => {
+    dismiss();
+  }, TOAST_REMOVE_DELAY);
+
 
   return {
     id: id,

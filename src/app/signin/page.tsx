@@ -45,8 +45,11 @@ export default function SignInPage() {
       const token = await userCredential.user.getIdToken();
       Cookies.set('firebaseIdToken', token, { expires: 1, path: '/' });
       
-      router.push('/start');
-      toast({ title: "Welcome back!" });
+      toast({ 
+        title: "Welcome back!",
+        onClose: () => router.push('/start'),
+        onAutoClose: () => router.push('/start'),
+      });
 
     } catch (error: any) {
       const errorCode = error.code;
