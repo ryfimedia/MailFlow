@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   SidebarProvider,
   Sidebar,
@@ -25,9 +25,12 @@ import {
   PlusCircle,
   LayoutTemplate,
   Image,
+  LogOut,
 } from "lucide-react";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/auth-context";
+import React from "react";
 
 function SetupBanner() {
     const { isSetupComplete, loading } = useSettings();
@@ -49,6 +52,26 @@ function SetupBanner() {
     );
 }
 
+function AuthWrapper({ children }: { children: React.ReactNode }) {
+    const { currentUser, loading } = useAuth();
+    const router = useRouter();
+
+    React.useEffect(() => {
+        if (!loading && !currentUser) {
+            router.push('/login');
+        }
+    }, [currentUser, loading, router]);
+
+    if (loading || !currentUser) {
+        return (
+            <div className="flex h-screen w-full items-center justify-center">
+                <Rocket className="w-12 h-12 animate-pulse" />
+            </div>
+        );
+    }
+    return <>{children}</>;
+}
+
 
 export default function AppLayout({
   children,
@@ -56,9 +79,10 @@ export default function AppLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const { currentUser, logout } = useAuth();
 
   const menuItems = [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
     { href: "/campaigns", label: "Campaigns", icon: Mail },
     { href: "/templates", label: "Templates", icon: LayoutTemplate },
     { href: "/contacts", label: "Contacts", icon: Users },
@@ -67,69 +91,71 @@ export default function AppLayout({
   ];
 
   return (
-    <SidebarProvider>
-      <Sidebar>
-        <SidebarHeader>
-          <div className="flex items-center gap-2">
-            <div className="p-2 rounded-lg bg-primary text-primary-foreground">
-              <Rocket className="w-6 h-6" />
+    <AuthWrapper>
+      <SidebarProvider>
+        <Sidebar>
+          <SidebarHeader>
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-lg bg-primary text-primary-foreground">
+                <Rocket className="w-6 h-6" />
+              </div>
+              <h1 className="text-xl font-bold font-headline text-foreground">
+                Ryfi MailFlow
+              </h1>
             </div>
-            <h1 className="text-xl font-bold font-headline text-foreground">
-              Ryfi MailFlow
-            </h1>
-          </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <Button asChild className="w-full justify-start bg-accent text-accent-foreground hover:bg-accent/90">
-                <Link href="/campaigns/new">
-                  <PlusCircle className="mr-2" />
-                  New Campaign
-                </Link>
-              </Button>
-            </SidebarMenuItem>
-          </SidebarMenu>
-          <SidebarMenu>
-            {menuItems.map((item) => (
-              <SidebarMenuItem key={item.href}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={
-                    item.href === "/"
-                      ? pathname === "/"
-                      : pathname.startsWith(item.href)
-                  }
-                  tooltip={item.label}
-                >
-                  <Link href={item.href}>
-                    <item.icon />
-                    <span>{item.label}</span>
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <Button asChild className="w-full justify-start bg-accent text-accent-foreground hover:bg-accent/90">
+                  <Link href="/campaigns/new">
+                    <PlusCircle className="mr-2" />
+                    New Campaign
                   </Link>
-                </SidebarMenuButton>
+                </Button>
               </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter className="p-4">
-          <div className="flex flex-col">
-            <span className="text-sm font-semibold">User</span>
-            <span className="text-xs text-muted-foreground">user@email.com</span>
-          </div>
-        </SidebarFooter>
-      </Sidebar>
-      <SettingsProvider>
-        <SidebarInset>
-            <header className="flex items-center justify-between p-4 bg-background border-b md:justify-end">
-            <SidebarTrigger className="md:hidden" />
-            <div className="flex items-center gap-4">
-                {/* Future user menu can be added here */}
+            </SidebarMenu>
+            <SidebarMenu>
+              {menuItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname === item.href}
+                    tooltip={item.label}
+                  >
+                    <Link href={item.href}>
+                      <item.icon />
+                      <span>{item.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarFooter className="flex-col !items-start gap-2 p-4">
+            <div className="flex flex-col">
+              <span className="text-sm font-semibold">User</span>
+              <span className="text-xs text-muted-foreground truncate">{currentUser?.email}</span>
             </div>
-            </header>
-            <SetupBanner />
-            <main className="p-4 md:p-6 lg:p-8">{children}</main>
-        </SidebarInset>
-      </SettingsProvider>
-    </SidebarProvider>
+            <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start -ml-2">
+                <LogOut className="mr-2" />
+                Logout
+            </Button>
+          </SidebarFooter>
+        </Sidebar>
+        <SettingsProvider>
+          <SidebarInset>
+              <header className="flex items-center justify-between p-4 bg-background border-b md:justify-end">
+              <SidebarTrigger className="md:hidden" />
+              <div className="flex items-center gap-4">
+                  {/* Future user menu can be added here */}
+              </div>
+              </header>
+              <SetupBanner />
+              <main className="p-4 md:p-6 lg:p-8">{children}</main>
+          </SidebarInset>
+        </SettingsProvider>
+      </SidebarProvider>
+    </AuthWrapper>
   );
 }
