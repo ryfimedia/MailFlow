@@ -47,6 +47,8 @@ import type { ContactList } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
+import { Textarea } from "@/components/ui/textarea";
+import { generateEmailBody } from "@/ai/flows/generate-email-body";
 
 
 const campaignFormSchema = z.object({
@@ -226,6 +228,11 @@ export default function NewCampaignPage() {
 
   const [isGeneratingSubject, setIsGeneratingSubject] = React.useState(false);
   const [subjectTone, setSubjectTone] = React.useState("Professional");
+
+  const [isGenerateBodyOpen, setIsGenerateBodyOpen] = React.useState(false);
+  const [isGeneratingBody, setIsGeneratingBody] = React.useState(false);
+  const [generationTopic, setGenerationTopic] = React.useState("");
+  const [generationTone, setGenerationTone] = React.useState("Professional");
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -594,6 +601,29 @@ export default function NewCampaignPage() {
     }
   };
 
+  const handleGenerateBody = async () => {
+    if (!generationTopic.trim()) {
+      toast({ variant: "destructive", title: "Topic is required", description: "Please describe the email you want to generate." });
+      return;
+    }
+    setIsGeneratingBody(true);
+    try {
+      const result = await generateEmailBody({
+        topic: generationTopic,
+        tone: generationTone,
+      });
+      if (result.htmlContent) {
+        form.setValue("emailBody", result.htmlContent, { shouldValidate: true, shouldDirty: true });
+        toast({ title: "Email Body Generated!", description: "The AI has drafted your email content." });
+        setIsGenerateBodyOpen(false);
+      }
+    } catch (error) {
+      console.error("Failed to generate email body:", error);
+      toast({ variant: "destructive", title: "AI Error", description: "Could not generate email content." });
+    } finally {
+      setIsGeneratingBody(false);
+    }
+  };
 
   const pageTitle = campaignId ? "Edit Campaign" : "New Campaign";
   const sendButtonDisabled = isSending || !isSetupComplete;
@@ -723,30 +753,76 @@ export default function NewCampaignPage() {
                         <CardTitle>Email Content</CardTitle>
                         <CardDescription>Compose your message for your audience.</CardDescription>
                       </div>
-                      <Dialog open={isSaveTemplateOpen} onOpenChange={setIsSaveTemplateOpen}>
-                          <DialogTrigger asChild>
-                              <Button variant="outline" size="sm">
-                                  <Save className="mr-2 h-4 w-4" />
-                                  Save as Template
-                              </Button>
-                          </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px]">
-                              <DialogHeader>
-                                  <DialogTitle>Save Email as Template</DialogTitle>
-                                  <DialogDescription>
-                                  This will save the current email body as a reusable template. The subject line and recipient list will not be saved.
-                                  </DialogDescription>
-                              </DialogHeader>
-                              <div className="space-y-2 py-4">
-                                  <Label htmlFor="template-name" className="text-right">Template Name</Label>
-                                  <Input id="template-name" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g., Monthly Newsletter" />
-                              </div>
-                              <DialogFooter>
-                                  <Button variant="outline" onClick={() => setIsSaveTemplateOpen(false)}>Cancel</Button>
-                                  <Button onClick={handleSaveTemplate}>Save Template</Button>
-                              </DialogFooter>
-                          </DialogContent>
-                      </Dialog>
+                      <div className="flex items-center gap-2">
+                          <Dialog open={isGenerateBodyOpen} onOpenChange={setIsGenerateBodyOpen}>
+                              <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                      <Sparkles className="mr-2 h-4 w-4" />
+                                      Generate with AI
+                                  </Button>
+                              </DialogTrigger>
+                              <DialogContent className="sm:max-w-lg">
+                                  <DialogHeader>
+                                      <DialogTitle>AI Email Assistant</DialogTitle>
+                                      <DialogDescription>
+                                          Describe the email you want to send. Be as specific as you like. The AI will generate the content for you.
+                                      </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="space-y-4 py-4">
+                                      <div className="space-y-2">
+                                          <Label htmlFor="generation-topic">Topic / Prompt</Label>
+                                          <Textarea id="generation-topic" value={generationTopic} onChange={(e) => setGenerationTopic(e.target.value)} placeholder="e.g., Announce a 25% off flash sale for our new line of summer t-shirts. The sale ends this Sunday." rows={4} />
+                                      </div>
+                                      <div className="space-y-2">
+                                          <Label htmlFor="generation-tone">Tone</Label>
+                                          <Select value={generationTone} onValueChange={setGenerationTone}>
+                                              <SelectTrigger id="generation-tone">
+                                                  <SelectValue placeholder="Tone" />
+                                              </SelectTrigger>
+                                              <SelectContent>
+                                                  <SelectItem value="Professional">Professional</SelectItem>
+                                                  <SelectItem value="Casual">Casual</SelectItem>
+                                                  <SelectItem value="Urgent">Urgent</SelectItem>
+                                                  <SelectItem value="Friendly">Friendly</SelectItem>
+                                                  <SelectItem value="Playful">Playful</SelectItem>
+                                              </SelectContent>
+                                          </Select>
+                                      </div>
+                                  </div>
+                                  <DialogFooter>
+                                      <Button variant="outline" onClick={() => setIsGenerateBodyOpen(false)}>Cancel</Button>
+                                      <Button onClick={handleGenerateBody} disabled={isGeneratingBody}>
+                                          {isGeneratingBody && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                          Generate Content
+                                      </Button>
+                                  </DialogFooter>
+                              </DialogContent>
+                          </Dialog>
+                          <Dialog open={isSaveTemplateOpen} onOpenChange={setIsSaveTemplateOpen}>
+                              <DialogTrigger asChild>
+                                  <Button variant="outline" size="sm">
+                                      <Save className="mr-2 h-4 w-4" />
+                                      Save as Template
+                                  </Button>
+                              </DialogTrigger>
+                              <DialogContent className="sm:max-w-[425px]">
+                                  <DialogHeader>
+                                      <DialogTitle>Save Email as Template</DialogTitle>
+                                      <DialogDescription>
+                                      This will save the current email body as a reusable template. The subject line and recipient list will not be saved.
+                                      </DialogDescription>
+                                  </DialogHeader>
+                                  <div className="space-y-2 py-4">
+                                      <Label htmlFor="template-name" className="text-right">Template Name</Label>
+                                      <Input id="template-name" value={templateName} onChange={(e) => setTemplateName(e.target.value)} placeholder="e.g., Monthly Newsletter" />
+                                  </div>
+                                  <DialogFooter>
+                                      <Button variant="outline" onClick={() => setIsSaveTemplateOpen(false)}>Cancel</Button>
+                                      <Button onClick={handleSaveTemplate}>Save Template</Button>
+                                  </DialogFooter>
+                              </DialogContent>
+                          </Dialog>
+                      </div>
                   </div>
               </CardHeader>
               <CardContent className="space-y-4">
