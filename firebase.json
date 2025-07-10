@@ -18,5 +18,24 @@
         "GOOGLE_API_KEY"
       ]
     }
-  ]
+  ],
+  "hosting": {
+    "source": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "frameworksBackend": {
+      "region": "us-central1",
+      "secretEnvironmentVariables": [
+        "RESEND_API_KEY",
+        "GOOGLE_API_KEY",
+        {
+          "key": "FIREBASE_SERVICE_ACCOUNT_BASE64",
+          "secret": "FIREBASE_SERVICE_ACCOUNT_BASE64"
+        }
+      ]
+    }
+  }
 }
