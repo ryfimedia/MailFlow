@@ -13,10 +13,10 @@ if (!admin.apps.length) {
     const serviceAccount = JSON.parse(serviceAccountString);
     
     // Determine the storage bucket from environment or service account
-    const storageBucket = process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : serviceAccount.project_id ? `${serviceAccount.project_id}.appspot.com` : undefined;
+    const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || (process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : undefined);
 
     if (!storageBucket) {
-        throw new Error("Could not determine the storage bucket. Ensure GCLOUD_PROJECT env var is set or the service account has a project_id.");
+        throw new Error("Could not determine the storage bucket. Ensure NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET or GCLOUD_PROJECT env var is set.");
     }
 
     admin.initializeApp({
