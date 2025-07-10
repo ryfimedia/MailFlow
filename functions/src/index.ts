@@ -1,8 +1,11 @@
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
-import { logger } from "firebase-functions/v2";
+import { logger, setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { Resend } from "resend";
+
+// Set the region for all functions in this file.
+setGlobalOptions({ region: "us-central1" });
 
 // Type definitions for Firestore documents.
 // These are simplified versions of the types in the main app (src/lib/types.ts)
