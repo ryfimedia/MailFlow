@@ -16,8 +16,10 @@ export function Toaster() {
   return (
     <ToastProvider>
       {toasts.map(function ({ id, title, description, action, ...props }) {
+        // Destructure our custom props so they aren't passed down to the DOM element.
+        const { onAutoClose, onClose, ...rest } = props;
         return (
-          <Toast key={id} {...props}>
+          <Toast key={id} {...rest}>
             <div className="grid gap-1">
               {title && <ToastTitle>{title}</ToastTitle>}
               {description && (
