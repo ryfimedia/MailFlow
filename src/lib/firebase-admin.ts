@@ -30,6 +30,3 @@ if (!admin.apps.length) {
     throw new Error(`Failed to initialize Firebase Admin SDK. Please check if your FIREBASE_SERVICE_ACCOUNT_BASE64 secret is a valid JSON. Error: ${error.message}`);
   }
 }
-
-export const adminDb = admin.firestore();
-export const adminStorage = admin.storage();

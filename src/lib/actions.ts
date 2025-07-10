@@ -1,13 +1,16 @@
 
 'use server';
 
-import { adminDb, adminStorage } from './firebase-admin';
 import { z } from 'zod';
 import { Resend } from 'resend';
 import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign, OptInForm } from './types';
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
 import admin from 'firebase-admin';
+import './firebase-admin'; // Ensure admin is initialized
+
+const adminDb = admin.firestore();
+const adminStorage = admin.storage();
 
 const FREE_TIER_DAILY_LIMIT = 100;
 
