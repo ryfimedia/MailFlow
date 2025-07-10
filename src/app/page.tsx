@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Mail, Users, Rocket, BarChart2, Mailbox, ClipboardList } from 'lucide-react';
+import { AuthButtons } from '@/components/auth-buttons';
 
 const features = [
   {
@@ -48,9 +49,7 @@ export default function LandingPage() {
             RyFi MailFlow
           </h1>
         </div>
-        <Button asChild>
-          <Link href="/start">Get Started</Link>
-        </Button>
+        <AuthButtons />
       </header>
 
       <main className="flex-grow">
@@ -63,7 +62,7 @@ export default function LandingPage() {
               RyFi MailFlow provides all the tools you need to engage your audience, from automated drip campaigns to powerful analytics and AI-driven content creation.
             </p>
             <Button asChild size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90">
-              <Link href="/start">Get Started for Free</Link>
+              <Link href="/signup">Get Started for Free</Link>
             </Button>
           </div>
         </section>

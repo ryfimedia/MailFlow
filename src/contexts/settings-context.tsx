@@ -4,6 +4,7 @@
 import React from 'react';
 import type { Settings } from '@/lib/types';
 import { getSettings } from '@/lib/actions';
+import { useAuth } from './auth-context';
 
 type SettingsContextType = {
   settings: Settings | null;
@@ -17,6 +18,7 @@ const SettingsContext = React.createContext<SettingsContextType | undefined>(und
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = React.useState<Settings | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const { user, loading: authLoading } = useAuth();
   
   const isSetupComplete = React.useMemo(() => {
     if (!settings) return false;
@@ -29,20 +31,29 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   }, [settings]);
 
   const reloadSettings = React.useCallback(async () => {
+    if (!user) {
+        setSettings(null);
+        setLoading(false);
+        return;
+    }
+
     setLoading(true);
     try {
       const freshSettings = await getSettings();
       setSettings(freshSettings);
     } catch (error) {
       console.error("Failed to reload settings", error);
+      setSettings(null); // Reset on error
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   React.useEffect(() => {
-    reloadSettings();
-  }, [reloadSettings]);
+    if (!authLoading) {
+      reloadSettings();
+    }
+  }, [authLoading, reloadSettings]);
 
   const value = { settings, loading, isSetupComplete, reloadSettings };
 

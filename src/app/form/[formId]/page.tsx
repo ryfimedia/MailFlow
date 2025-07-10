@@ -68,11 +68,15 @@ export default function PublicFormPage() {
   }, [formId]);
 
   const onSubmit = async (data: FormValues) => {
-    if (!formId) return;
+    if (!formDetails?.userId) {
+        setError("This form is not configured correctly.");
+        return;
+    }
     setLoading(true);
     try {
         const result = await addContactFromForm({
-            formId,
+            userId: formDetails.userId,
+            formId: formId,
             email: data.email,
             firstName: data.firstName,
             lastName: data.lastName,

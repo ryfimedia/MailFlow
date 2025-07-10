@@ -88,6 +88,7 @@ export type MediaImage = {
 
 export type OptInForm = {
     id: string;
+    userId?: string; // Used internally for public forms
     name: string;
     contactListId: string;
     title: string;

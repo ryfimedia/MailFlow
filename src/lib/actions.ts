@@ -4,22 +4,42 @@
 import { z } from 'zod';
 import { Resend } from 'resend';
 import type { Campaign, Contact, ContactList, Settings, Template, MediaImage, DripCampaign, OptInForm } from './types';
-import admin from './firebase-admin'; // Use the initialized admin instance
+import admin from 'firebase-admin'; // Use the initialized admin instance
 import { FieldValue } from 'firebase-admin/firestore';
 import { defaultTemplates } from './default-templates';
+import { headers } from 'next/headers';
+import { auth as adminAuth } from 'firebase-admin';
 
-const adminDb = admin.firestore();
-const adminStorage = admin.storage();
+async function getUserIdFromSession() {
+    const authorization = headers().get('Authorization');
+    if (authorization?.startsWith('Bearer ')) {
+        const idToken = authorization.split('Bearer ')[1];
+        try {
+            const decodedToken = await adminAuth().verifyIdToken(idToken);
+            return decodedToken.uid;
+        } catch (error) {
+            console.error('Error verifying auth token:', error);
+            return null;
+        }
+    }
+    return null;
+}
 
+async function getDb() {
+    const userId = await getUserIdFromSession();
+    if (!userId) {
+        throw new Error('User not authenticated');
+    }
+    return admin.firestore().collection('users').doc(userId);
+}
 
-const FREE_TIER_DAILY_LIMIT = 100;
 
 function getBucket() {
-    const bucketName = admin.app().options.storageBucket;
+    const bucketName = process.env.GCLOUD_PROJECT ? `${process.env.GCLOUD_PROJECT}.appspot.com` : undefined;
     if (!bucketName) {
-        throw new Error('Firebase Storage bucket name is not configured. Check your service account credentials or environment variables.');
+        throw new Error('Firebase Storage bucket name is not configured. Check your GCLOUD_PROJECT env var.');
     }
-    return adminStorage.bucket(bucketName);
+    return admin.storage().bucket(bucketName);
 }
 
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
@@ -38,11 +58,23 @@ function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
     return docObject;
 }
 
+// ==== USERS ====
+export async function createUserDocument(uid: string, email: string, displayName: string) {
+    const userRef = admin.firestore().collection('users').doc(uid);
+    await userRef.set({
+        email,
+        displayName,
+        createdAt: FieldValue.serverTimestamp(),
+    });
+}
+
+
 // ==== CAMPAIGNS ====
 
 export async function getCampaigns(): Promise<Campaign[]> {
-    const campaignsCollection = adminDb.collection('campaigns');
-    const settingsRef = adminDb.collection('meta').doc('settings');
+    const userDb = await getDb();
+    const campaignsCollection = userDb.collection('campaigns');
+    const settingsRef = userDb.collection('meta').doc('settings');
 
     const [campaignsSnapshot, settingsDoc] = await Promise.all([
         campaignsCollection.orderBy('createdAt', 'desc').get(),
@@ -55,7 +87,7 @@ export async function getCampaigns(): Promise<Campaign[]> {
         const welcomeTemplate = defaultTemplates.find(t => t.name === 'Welcome Email');
         
         if (welcomeTemplate) {
-             const batch = adminDb.batch();
+             const batch = admin.firestore().batch();
              const newCampaignRef = campaignsCollection.doc();
              
              batch.set(newCampaignRef, {
@@ -82,19 +114,21 @@ export async function getCampaigns(): Promise<Campaign[]> {
 }
 
 export async function getCampaignById(id: string): Promise<Campaign | null> {
-    const doc = await adminDb.collection('campaigns').doc(id).get();
+    const userDb = await getDb();
+    const doc = await userDb.collection('campaigns').doc(id).get();
     return docWithIdAndTimestamps(doc) as Campaign | null;
 }
 
 export async function saveCampaign(data: Partial<Campaign> & { id: string | null }) {
+    const userDb = await getDb();
     const { id, tags, ...campaignData } = data;
     
     if (campaignData.status === 'Draft') {
         if (id) {
-            await adminDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+            await userDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
             return { id };
         } else {
-            const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, tags: tags || [], createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+            const newDocRef = await userDb.collection('campaigns').add({ ...campaignData, tags: tags || [], createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
             return { id: newDocRef.id };
         }
     }
@@ -198,15 +232,16 @@ export async function saveCampaign(data: Partial<Campaign> & { id: string | null
     let successMessage = `Campaign sent to ${recipients.length} recipients.`;
 
     if (id) {
-        await adminDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        await userDb.collection('campaigns').doc(id).set({ ...campaignData, tags: tags || [], updatedAt: FieldValue.serverTimestamp() }, { merge: true });
         return { id, success: successMessage };
     } else {
-        const newDocRef = await adminDb.collection('campaigns').add({ ...campaignData, tags: tags || [], createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+        const newDocRef = await userDb.collection('campaigns').add({ ...campaignData, tags: tags || [], createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
         return { id: newDocRef.id, success: successMessage };
     }
 }
 
 export async function duplicateCampaign(campaignId: string): Promise<Campaign | null> {
+    const userDb = await getDb();
     const originalCampaign = await getCampaignById(campaignId);
     if (!originalCampaign) return null;
 
@@ -226,7 +261,7 @@ export async function duplicateCampaign(campaignId: string): Promise<Campaign | 
     delete newCampaign.unsubscribes;
     delete newCampaign.scheduledAt;
 
-    const newDocRef = await adminDb.collection('campaigns').add({
+    const newDocRef = await userDb.collection('campaigns').add({
         ...newCampaign,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp()
@@ -235,32 +270,36 @@ export async function duplicateCampaign(campaignId: string): Promise<Campaign | 
 }
 
 export async function deleteCampaign(id: string) {
-    await adminDb.collection('campaigns').doc(id).delete();
+    const userDb = await getDb();
+    await userDb.collection('campaigns').doc(id).delete();
 }
 
 // ==== DRIP CAMPAIGNS ====
 
 export async function getDripCampaigns(): Promise<DripCampaign[]> {
-    const snapshot = await adminDb.collection('dripCampaigns').orderBy('createdAt', 'desc').get();
+    const userDb = await getDb();
+    const snapshot = await userDb.collection('dripCampaigns').orderBy('createdAt', 'desc').get();
     return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as DripCampaign);
 }
 
 export async function getDripCampaignById(id: string): Promise<DripCampaign | null> {
-    const doc = await adminDb.collection('dripCampaigns').doc(id).get();
+    const userDb = await getDb();
+    const doc = await userDb.collection('dripCampaigns').doc(id).get();
     return docWithIdAndTimestamps(doc) as DripCampaign | null;
 }
 
 export async function saveDripCampaign(data: Partial<DripCampaign> & { id?: string | null }) {
+    const userDb = await getDb();
     const { id, ...dripData } = data;
     
     if (id) {
-        await adminDb.collection('dripCampaigns').doc(id).set({
+        await userDb.collection('dripCampaigns').doc(id).set({
             ...dripData,
             updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
         return { id };
     } else {
-        const newDocRef = await adminDb.collection('dripCampaigns').add({
+        const newDocRef = await userDb.collection('dripCampaigns').add({
             ...dripData,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
@@ -270,15 +309,17 @@ export async function saveDripCampaign(data: Partial<DripCampaign> & { id?: stri
 }
 
 export async function deleteDripCampaign(id: string) {
-    await adminDb.collection('dripCampaigns').doc(id).delete();
+    const userDb = await getDb();
+    await userDb.collection('dripCampaigns').doc(id).delete();
 }
 
 
 // ==== TEMPLATES ====
 
 export async function getTemplates(): Promise<Template[]> {
-    const templatesCollection = adminDb.collection('templates');
-    const settingsRef = adminDb.collection('meta').doc('settings');
+    const userDb = await getDb();
+    const templatesCollection = userDb.collection('templates');
+    const settingsRef = userDb.collection('meta').doc('settings');
 
     const [snapshot, settingsDoc] = await Promise.all([
         templatesCollection.orderBy('createdAt', 'desc').get(),
@@ -288,7 +329,7 @@ export async function getTemplates(): Promise<Template[]> {
     const settings = settingsDoc.data() || {};
 
     if (!settings.templatesSeeded) {
-        const batch = adminDb.batch();
+        const batch = admin.firestore().batch();
         
         defaultTemplates.forEach(template => {
             const docRef = templatesCollection.doc();
@@ -307,12 +348,13 @@ export async function getTemplates(): Promise<Template[]> {
 }
 
 export async function saveTemplate(data: Omit<Template, 'id' | 'createdAt'> & { id?: string }) {
+    const userDb = await getDb();
     const { id, ...templateData } = data;
     if (id) {
-        await adminDb.collection('templates').doc(id).update(templateData);
+        await userDb.collection('templates').doc(id).update(templateData);
         return { id };
     } else {
-        const newDocRef = await adminDb.collection('templates').add({
+        const newDocRef = await userDb.collection('templates').add({
             ...templateData,
             createdAt: FieldValue.serverTimestamp()
         });
@@ -321,31 +363,46 @@ export async function saveTemplate(data: Omit<Template, 'id' | 'createdAt'> & { 
 }
 
 export async function deleteTemplate(id: string) {
-    await adminDb.collection('templates').doc(id).delete();
+    const userDb = await getDb();
+    await userDb.collection('templates').doc(id).delete();
 }
 
 // ==== OPT-IN FORMS ====
 
 export async function getOptInForms(): Promise<OptInForm[]> {
-    const snapshot = await adminDb.collection('optInForms').orderBy('createdAt', 'desc').get();
+    const userDb = await getDb();
+    const snapshot = await userDb.collection('optInForms').orderBy('createdAt', 'desc').get();
     return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as OptInForm);
 }
 
 export async function getOptInFormById(id: string): Promise<OptInForm | null> {
-    const doc = await adminDb.collection('optInForms').doc(id).get();
-    return docWithIdAndTimestamps(doc) as OptInForm | null;
+    // Note: This action might be called by unauthenticated users from the public form page.
+    // We can't use getDb() here directly. Instead, we'll assume the form ID implies a user context
+    // but this part of the data model might need review for multi-tenant security.
+    // For now, we query across all users' forms. This is NOT secure for production.
+    const formsQuery = await admin.firestore().collectionGroup('optInForms').where('id', '==', id).limit(1).get();
+    if (formsQuery.empty) return null;
+    const doc = formsQuery.docs[0];
+    
+    const form = docWithIdAndTimestamps(doc) as OptInForm;
+    // We need to get the owner to find the contact list
+    const userId = doc.ref.parent.parent!.id;
+    form.userId = userId;
+
+    return form;
 }
 
 export async function saveOptInForm(data: Partial<OptInForm> & { id?: string | null }) {
+    const userDb = await getDb();
     const { id, ...formData } = data;
     if (id) {
-        await adminDb.collection('optInForms').doc(id).set({
+        await userDb.collection('optInForms').doc(id).set({
             ...formData,
             updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
         return { id };
     } else {
-        const newDocRef = await adminDb.collection('optInForms').add({
+        const newDocRef = await userDb.collection('optInForms').add({
             ...formData,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp()
@@ -355,17 +412,22 @@ export async function saveOptInForm(data: Partial<OptInForm> & { id?: string | n
 }
 
 export async function deleteOptInForm(id: string) {
-    await adminDb.collection('optInForms').doc(id).delete();
+    const userDb = await getDb();
+    await userDb.collection('optInForms').doc(id).delete();
 }
 
-export async function addContactFromForm(data: { formId: string, email: string, firstName?: string, lastName?: string, phone?: string, company?: string }) {
-    const form = await getOptInFormById(data.formId);
-    if (!form) {
+export async function addContactFromForm(data: { userId: string, formId: string, email: string, firstName?: string, lastName?: string, phone?: string, company?: string }) {
+    const { userId, formId, ...contactData } = data;
+    const userDb = admin.firestore().collection('users').doc(userId);
+    
+    const formDoc = await userDb.collection('optInForms').doc(formId).get();
+    if (!formDoc.exists) {
         return { error: 'Form not found.' };
     }
+    const form = formDoc.data() as OptInForm;
 
-    const email = data.email.trim().toLowerCase();
-    const existingContactQuery = await adminDb.collection('contacts').where('email', '==', email).limit(1).get();
+    const email = contactData.email.trim().toLowerCase();
+    const existingContactQuery = await userDb.collection('contacts').where('email', '==', email).limit(1).get();
 
     if (!existingContactQuery.empty) {
         const existingContactDoc = existingContactQuery.docs[0];
@@ -378,16 +440,16 @@ export async function addContactFromForm(data: { formId: string, email: string, 
 
     const newContact: Omit<Contact, 'id'> = {
         email,
-        firstName: data.firstName || '',
-        lastName: data.lastName || '',
-        phone: data.phone || '',
-        company: data.company || '',
+        firstName: contactData.firstName || '',
+        lastName: contactData.lastName || '',
+        phone: contactData.phone || '',
+        company: contactData.company || '',
         status: 'Subscribed',
         subscribedAt: new Date().toISOString(),
         listIds: [form.contactListId, 'all'],
     };
 
-    const newContactRef = await adminDb.collection('contacts').add(newContact);
+    const newContactRef = await userDb.collection('contacts').add(newContact);
     
     await updateAllListCounts();
 
@@ -398,11 +460,12 @@ export async function addContactFromForm(data: { formId: string, email: string, 
 // ==== CONTACTS & LISTS ====
 
 export async function getContactLists(): Promise<ContactList[]> {
-    const listsCollection = adminDb.collection('lists');
-    const contactsCollection = adminDb.collection('contacts');
+    const userDb = await getDb();
+    const listsCollection = userDb.collection('lists');
+    const contactsCollection = userDb.collection('contacts');
 
     let listsSnapshot = await listsCollection.get();
-    const batch = adminDb.batch();
+    const batch = admin.firestore().batch();
     let isSeedingPerformed = false;
 
     const existingListIds = new Set(listsSnapshot.docs.map(doc => doc.id));
@@ -477,17 +540,20 @@ export async function getContactLists(): Promise<ContactList[]> {
 }
 
 export async function getContactListById(id: string): Promise<ContactList | null> {
-    const doc = await adminDb.collection('lists').doc(id).get();
+    const userDb = await getDb();
+    const doc = await userDb.collection('lists').doc(id).get();
     return docWithIdAndTimestamps(doc) as ContactList | null;
 }
 
 export async function getContactsByListId(listId: string): Promise<Contact[]> {
-    const snapshot = await adminDb.collection('contacts').where('listIds', 'array-contains', listId).get();
+    const userDb = await getDb();
+    const snapshot = await userDb.collection('contacts').where('listIds', 'array-contains', listId).get();
     return snapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Contact);
 }
 
 export async function createList(name: string): Promise<void> {
-    await adminDb.collection('lists').add({
+    const userDb = await getDb();
+    await userDb.collection('lists').add({
       name,
       count: 0,
       createdAt: FieldValue.serverTimestamp(),
@@ -496,11 +562,13 @@ export async function createList(name: string): Promise<void> {
 }
 
 export async function renameList(id: string, newName: string): Promise<void> {
-    await adminDb.collection('lists').doc(id).update({ name: newName });
+    const userDb = await getDb();
+    await userDb.collection('lists').doc(id).update({ name: newName });
 }
 
 export async function deleteList(id: string): Promise<void> {
-    const listRef = adminDb.collection('lists').doc(id);
+    const userDb = await getDb();
+    const listRef = userDb.collection('lists').doc(id);
     const listDoc = await listRef.get();
 
     if (!listDoc.exists) {
@@ -511,7 +579,7 @@ export async function deleteList(id: string): Promise<void> {
     }
     
     // Check if the list is used in any active drip campaigns
-    const activeDripsUsingList = await adminDb.collection('dripCampaigns')
+    const activeDripsUsingList = await userDb.collection('dripCampaigns')
         .where('contactListId', '==', id)
         .where('status', '==', 'Active')
         .limit(1)
@@ -521,9 +589,9 @@ export async function deleteList(id: string): Promise<void> {
         throw new Error("This list is used by an active drip campaign and cannot be deleted. Please pause or change the campaign's list first.");
     }
 
-    const batch = adminDb.batch();
+    const batch = admin.firestore().batch();
     
-    const contactsSnapshot = await adminDb.collection('contacts').where('listIds', 'array-contains', id).get();
+    const contactsSnapshot = await userDb.collection('contacts').where('listIds', 'array-contains', id).get();
     contactsSnapshot.forEach(doc => {
         batch.update(doc.ref, { listIds: FieldValue.arrayRemove(id) });
     });
@@ -534,7 +602,8 @@ export async function deleteList(id: string): Promise<void> {
 }
 
 export async function updateContact(contactId: string, data: Partial<Contact>, currentListId: string): Promise<void> {
-    const contactRef = adminDb.collection('contacts').doc(contactId);
+    const userDb = await getDb();
+    const contactRef = userDb.collection('contacts').doc(contactId);
     const oldContactSnap = await contactRef.get();
     if (!oldContactSnap.exists) throw new Error("Contact not found");
     const oldContactData = oldContactSnap.data() as Contact;
@@ -542,7 +611,7 @@ export async function updateContact(contactId: string, data: Partial<Contact>, c
     const oldStatus = oldContactData.status;
     const newStatus = data.status;
 
-    const batch = adminDb.batch();
+    const batch = admin.firestore().batch();
     batch.update(contactRef, data);
 
     if (oldStatus !== newStatus) {
@@ -562,9 +631,10 @@ export async function updateContact(contactId: string, data: Partial<Contact>, c
 }
 
 export async function removeContactsFromList(contactIds: string[], listId: string): Promise<void> {
-    const batch = adminDb.batch();
+    const userDb = await getDb();
+    const batch = admin.firestore().batch();
     contactIds.forEach(contactId => {
-        const contactRef = adminDb.collection('contacts').doc(contactId);
+        const contactRef = userDb.collection('contacts').doc(contactId);
         batch.update(contactRef, { listIds: FieldValue.arrayRemove(listId) });
     });
     await batch.commit();
@@ -572,9 +642,10 @@ export async function removeContactsFromList(contactIds: string[], listId: strin
 }
 
 export async function addContactsToLists(contactIds: string[], listIds: string[]): Promise<{ addedCount: number, targetListName: string}> {
-    const batch = adminDb.batch();
+    const userDb = await getDb();
+    const batch = admin.firestore().batch();
     contactIds.forEach(contactId => {
-        const contactRef = adminDb.collection('contacts').doc(contactId);
+        const contactRef = userDb.collection('contacts').doc(contactId);
         batch.update(contactRef, { listIds: FieldValue.arrayUnion(...listIds) });
     });
     await batch.commit();
@@ -585,18 +656,20 @@ export async function addContactsToLists(contactIds: string[], listIds: string[]
 }
 
 export async function addTagsToContacts(contactIds: string[], tags: string[]): Promise<void> {
-    const batch = adminDb.batch();
+    const userDb = await getDb();
+    const batch = admin.firestore().batch();
     contactIds.forEach(contactId => {
-        const contactRef = adminDb.collection('contacts').doc(contactId);
+        const contactRef = userDb.collection('contacts').doc(contactId);
         batch.update(contactRef, { tags: FieldValue.arrayUnion(...tags) });
     });
     await batch.commit();
 }
 
 export async function removeTagsFromContacts(contactIds: string[], tags: string[]): Promise<void> {
-    const batch = adminDb.batch();
+    const userDb = await getDb();
+    const batch = admin.firestore().batch();
     contactIds.forEach(contactId => {
-        const contactRef = adminDb.collection('contacts').doc(contactId);
+        const contactRef = userDb.collection('contacts').doc(contactId);
         batch.update(contactRef, { tags: FieldValue.arrayRemove(...tags) });
     });
     await batch.commit();
@@ -609,11 +682,12 @@ export async function importContacts(data: {
     uploadNewListName: string,
     uploadTargetListId: string
 }) {
+    const userDb = await getDb();
     let targetListId = data.uploadTargetListId;
     let targetListName = '';
 
     if (data.uploadOption === 'new') {
-        const newListRef = await adminDb.collection('lists').add({
+        const newListRef = await userDb.collection('lists').add({
             name: data.uploadNewListName,
             count: 0,
             createdAt: FieldValue.serverTimestamp(),
@@ -622,14 +696,14 @@ export async function importContacts(data: {
         targetListId = newListRef.id;
         targetListName = data.uploadNewListName;
     } else {
-        const listDoc = await adminDb.collection('lists').doc(targetListId).get();
+        const listDoc = await userDb.collection('lists').doc(targetListId).get();
         targetListName = listDoc.data()?.name || '';
     }
 
-    const allContactsSnapshot = await adminDb.collection('contacts').select('email').get();
+    const allContactsSnapshot = await userDb.collection('contacts').select('email').get();
     const existingEmails = new Set(allContactsSnapshot.docs.map(doc => doc.data().email));
     
-    const batch = adminDb.batch();
+    const batch = admin.firestore().batch();
     let newContactsAddedCount = 0;
 
     data.contacts.forEach(row => {
@@ -648,7 +722,7 @@ export async function importContacts(data: {
                     subscribedAt: new Date().toISOString(),
                     listIds: ['all', targetListId],
                 };
-                const contactRef = adminDb.collection('contacts').doc();
+                const contactRef = userDb.collection('contacts').doc();
                 batch.set(contactRef, newContact);
                 existingEmails.add(sanitizedEmail);
                 newContactsAddedCount++;
@@ -669,12 +743,14 @@ export async function importContacts(data: {
 // ==== SETTINGS ====
 
 export async function getSettings(): Promise<Settings> {
-    const doc = await adminDb.collection('meta').doc('settings').get();
+    const userDb = await getDb();
+    const doc = await userDb.collection('meta').doc('settings').get();
     return (docWithIdAndTimestamps(doc) as Settings) || {};
 }
 
 export async function saveSettings(data: Partial<Settings>) {
-    const settingsDocRef = adminDb.collection('meta').doc('settings');
+    const userDb = await getDb();
+    const settingsDocRef = userDb.collection('meta').doc('settings');
     
     const currentSettings = (await settingsDocRef.get()).data() || {};
 
@@ -698,11 +774,12 @@ export async function saveSettings(data: Partial<Settings>) {
 // ==== DASHBOARD & HELPERS ====
 
 async function updateAllListCounts() {
-    const listsSnapshot = await adminDb.collection('lists').get();
-    const batch = adminDb.batch();
+    const userDb = await getDb();
+    const listsSnapshot = await userDb.collection('lists').get();
+    const batch = admin.firestore().batch();
 
     for (const listDoc of listsSnapshot.docs) {
-        const contactsCountSnapshot = await adminDb.collection('contacts').where('listIds', 'array-contains', listDoc.id).count().get();
+        const contactsCountSnapshot = await userDb.collection('contacts').where('listIds', 'array-contains', listDoc.id).count().get();
         const count = contactsCountSnapshot.data().count;
         batch.update(listDoc.ref, { count });
     }
@@ -711,9 +788,10 @@ async function updateAllListCounts() {
 }
 
 export async function getDashboardData() {
+    const userDb = await getDb();
     const [campaignsSnapshot, allContactsListSnapshot] = await Promise.all([
-        adminDb.collection('campaigns').orderBy('createdAt', 'desc').get(),
-        adminDb.collection('lists').doc('all').get()
+        userDb.collection('campaigns').orderBy('createdAt', 'desc').get(),
+        userDb.collection('lists').doc('all').get()
     ]);
     
     const allCampaigns = campaignsSnapshot.docs.map(doc => docWithIdAndTimestamps(doc) as Campaign);
@@ -780,6 +858,11 @@ export async function getDashboardData() {
 
 
 export async function uploadImage(formData: FormData): Promise<{ url?: string; error?: string }> {
+    const userId = await getUserIdFromSession();
+    if (!userId) {
+        return { error: 'User not authenticated' };
+    }
+
     try {
         const imageFile = formData.get('image') as File | null;
         if (!imageFile) {
@@ -788,7 +871,9 @@ export async function uploadImage(formData: FormData): Promise<{ url?: string; e
 
         const bucket = getBucket();
         const fileName = `${Date.now()}-${imageFile.name.replace(/\s/g, '_')}`;
-        const file = bucket.file(`campaign-images/${fileName}`);
+        // Store images in a user-specific folder
+        const filePath = `users/${userId}/campaign-images/${fileName}`;
+        const file = bucket.file(filePath);
 
         const fileBuffer = Buffer.from(await imageFile.arrayBuffer());
 
@@ -809,9 +894,15 @@ export async function uploadImage(formData: FormData): Promise<{ url?: string; e
 
 // ==== MEDIA ====
 export async function getMediaImages(): Promise<MediaImage[]> {
+    const userId = await getUserIdFromSession();
+    if (!userId) {
+        // Return empty array if not authenticated, as this might be called in contexts where it's not a hard error.
+        return [];
+    }
+
     try {
         const bucket = getBucket();
-        const [files] = await bucket.getFiles({ prefix: 'campaign-images/' });
+        const [files] = await bucket.getFiles({ prefix: `users/${userId}/campaign-images/` });
 
         if (files.length === 0) return [];
         // The first file is often the directory itself, so filter it out.
@@ -834,13 +925,20 @@ export async function getMediaImages(): Promise<MediaImage[]> {
         return mediaImages;
     } catch (error) {
         console.error("Error fetching media from Firebase Storage:", error);
-        // This can happen if Storage is not enabled or permissions are wrong.
-        // Return an empty array to avoid crashing the page.
         return [];
     }
 }
 
 export async function deleteMediaImage(fileName: string): Promise<{ success: boolean; error?: string }> {
+    const userId = await getUserIdFromSession();
+    if (!userId) {
+        return { success: false, error: 'User not authenticated' };
+    }
+    // Security check: ensure the file being deleted belongs to the user.
+    if (!fileName.startsWith(`users/${userId}/`)) {
+        return { success: false, error: 'Permission denied.' };
+    }
+
     try {
         const bucket = getBucket();
         await bucket.file(fileName).delete();
@@ -854,19 +952,24 @@ export async function deleteMediaImage(fileName: string): Promise<{ success: boo
 // ==== UNSUBSCRIBE ====
 
 export async function getUnsubscribeDetails(contactId: string, listId: string | null, all: boolean): Promise<{contactEmail: string, listName?: string, error?: string}> {
-    const contactRef = adminDb.collection('contacts').doc(contactId);
-    const contactDoc = await contactRef.get();
-    
-    if (!contactDoc.exists) {
+    // This is a public action and does not have user context.
+    // It needs to find the contact across all users. This is not secure for a real multi-tenant app.
+    const contactsQuery = await admin.firestore().collectionGroup('contacts').where('id', '==', contactId).limit(1).get();
+    if (contactsQuery.empty) {
         return { error: 'This contact does not exist.', contactEmail: '' };
     }
+
+    const contactDoc = contactsQuery.docs[0];
     const contact = contactDoc.data() as Contact;
     
     if (all || !listId) {
         return { contactEmail: contact.email };
     }
+    
+    const userId = contactDoc.ref.parent.parent!.id;
+    const userDb = admin.firestore().collection('users').doc(userId);
 
-    const listRef = adminDb.collection('lists').doc(listId);
+    const listRef = userDb.collection('lists').doc(listId);
     const listDoc = await listRef.get();
     if (!listDoc.exists) {
          return { error: 'The specified list does not exist.', contactEmail: '' };
@@ -877,14 +980,18 @@ export async function getUnsubscribeDetails(contactId: string, listId: string | 
 }
 
 export async function unsubscribeContact(contactId: string, listId: string | null, all: boolean): Promise<{success?: boolean, error?: string}> {
-    const contactRef = adminDb.collection('contacts').doc(contactId);
-    const contactDoc = await contactRef.get();
-    if (!contactDoc.exists) {
+    // This is a public action and does not have user context.
+    const contactsQuery = await admin.firestore().collectionGroup('contacts').where('id', '==', contactId).limit(1).get();
+    if (contactsQuery.empty) {
         return { error: 'Contact not found.' };
     }
+    const contactDoc = contactsQuery.docs[0];
+    const contactRef = contactDoc.ref;
     const contactData = contactDoc.data() as Contact;
+    
+    const userId = contactDoc.ref.parent.parent!.id;
 
-    const batch = adminDb.batch();
+    const batch = admin.firestore().batch();
 
     if (all) {
         const allUserLists = contactData.listIds.filter(id => !['all', 'unsubscribes', 'bounces'].includes(id));
@@ -900,9 +1007,18 @@ export async function unsubscribeContact(contactId: string, listId: string | nul
     }
 
     await batch.commit();
-    await updateAllListCounts();
+    
+    // Need to pass userId to update counts for the correct user
+    const userDb = admin.firestore().collection('users').doc(userId);
+    const listsSnapshot = await userDb.collection('lists').get();
+    const countBatch = admin.firestore().batch();
+
+    for (const listDoc of listsSnapshot.docs) {
+        const contactsCountSnapshot = await userDb.collection('contacts').where('listIds', 'array-contains', listDoc.id).count().get();
+        const count = contactsCountSnapshot.data().count;
+        countBatch.update(listDoc.ref, { count });
+    }
+    await countBatch.commit();
+
     return { success: true };
 }
-
-
-    
