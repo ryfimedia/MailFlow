@@ -12,7 +12,11 @@ import admin from 'firebase-admin';
 const FREE_TIER_DAILY_LIMIT = 100;
 
 function getBucket() {
-    return adminStorage.bucket();
+    const bucketName = admin.app().options.storageBucket;
+    if (!bucketName) {
+        throw new Error('Firebase Storage bucket name is not configured. Check your service account credentials or environment variables.');
+    }
+    return adminStorage.bucket(bucketName);
 }
 
 function docWithIdAndTimestamps(doc: admin.firestore.DocumentSnapshot) {
@@ -885,3 +889,6 @@ export async function unsubscribeContact(contactId: string, listId: string | nul
     await updateAllListCounts();
     return { success: true };
 }
+
+
+    
