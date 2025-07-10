@@ -49,8 +49,12 @@ const storage = admin.storage();
 export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) => {
     logger.log("Starting unused image cleanup task.");
 
-    const BUCKET_NAME = process.env.GCLOUD_PROJECT + ".appspot.com";
-    const bucket = storage.bucket(BUCKET_NAME);
+    const bucketName = admin.app().options.storageBucket;
+    if (!bucketName) {
+        logger.error("Storage bucket name not found in function configuration. Aborting cleanup.");
+        return null;
+    }
+    const bucket = storage.bucket(bucketName);
 
     // 1. Get all campaigns updated in the last 365 days.
     const oneYearAgo = new Date();
@@ -128,6 +132,12 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
     }
     const resend = new Resend(resendApiKey);
 
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+    if (!baseUrl) {
+      logger.error("NEXT_PUBLIC_BASE_URL is not set in environment variables. Unsubscribe links will be incorrect.");
+      return null;
+    }
+
     const settingsDoc = await db.collection("meta").doc("settings").get();
     const settings = settingsDoc.data() || {};
     
@@ -193,8 +203,8 @@ export const processDripCampaigns = onSchedule("every 24 hours", async (event) =
               .replace(/\[LastName\]/g, contact.lastName || '')
               .replace(/\[Email\]/g, contact.email || '');
 
-            const listUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
-            const allUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&all=true`;
+            const listUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
+            const allUnsubscribeUrl = `${baseUrl}/unsubscribe?contactId=${contact.id}&all=true`;
                 
             const footer = `
                 <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
