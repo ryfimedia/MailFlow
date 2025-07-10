@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags, Loader2, Sparkles } from "lucide-react";
+import { Calendar, Send, Bold, Italic, Underline, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Palette, Smile, Minus, Save, Component, Box, Undo, Paintbrush, RemoveFormatting, Tags, Loader2, Sparkles, Upload } from "lucide-react";
 import React from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
@@ -42,13 +42,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { getCampaignById, getContactLists, saveCampaign, saveTemplate, uploadImage } from "@/lib/actions";
-import type { ContactList } from "@/lib/types";
+import { getCampaignById, getContactLists, saveCampaign, saveTemplate, uploadImage, getMediaImages } from "@/lib/actions";
+import type { ContactList, MediaImage } from "@/lib/types";
 import { useSettings } from "@/contexts/settings-context";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { generateSubjectLine } from "@/ai/flows/generate-subject-line";
 import { Textarea } from "@/components/ui/textarea";
 import { generateEmailBody } from "@/ai/flows/generate-email-body";
+import Image from "next/image";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 
 
 const campaignFormSchema = z.object({
@@ -191,6 +194,54 @@ const resizeImage = (file: File, maxWidth = 1080, maxHeight = 1920, quality = 0.
     });
 };
 
+function ImageLibrary({ onSelect }: { onSelect: (url: string) => void }) {
+    const [images, setImages] = React.useState<MediaImage[]>([]);
+    const [loading, setLoading] = React.useState(true);
+
+    React.useEffect(() => {
+        async function fetchImages() {
+            setLoading(true);
+            try {
+                const fetchedImages = await getMediaImages();
+                setImages(fetchedImages);
+            } catch (error) {
+                console.error("Failed to load images", error);
+            } finally {
+                setLoading(false);
+            }
+        }
+        fetchImages();
+    }, []);
+
+    if (loading) {
+        return (
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4">
+                {Array.from({ length: 10 }).map((_, i) => (
+                    <Skeleton key={i} className="aspect-square" />
+                ))}
+            </div>
+        );
+    }
+    
+    if (images.length === 0) {
+        return <p className="text-muted-foreground text-center">Your media library is empty.</p>
+    }
+
+    return (
+        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-4 max-h-[50vh] overflow-y-auto p-1">
+            {images.map(image => (
+                <button
+                    key={image.name}
+                    type="button"
+                    onClick={() => onSelect(image.url)}
+                    className="aspect-square relative rounded-md overflow-hidden focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                >
+                    <Image src={image.url} alt={image.name} fill sizes="20vw" className="object-cover" />
+                </button>
+            ))}
+        </div>
+    );
+}
 
 export default function NewCampaignPage() {
   const router = useRouter();
@@ -233,6 +284,8 @@ export default function NewCampaignPage() {
   const [isGeneratingBody, setIsGeneratingBody] = React.useState(false);
   const [generationTopic, setGenerationTopic] = React.useState("");
   const [generationTone, setGenerationTone] = React.useState("Professional");
+
+  const [isImageDialogOpen, setIsImageDialogOpen] = React.useState(false);
 
   const form = useForm<CampaignFormValues>({
     resolver: zodResolver(campaignFormSchema),
@@ -354,48 +407,52 @@ export default function NewCampaignPage() {
     if (html) { applyFormat("insertHTML", `<span style="font-size: ${size};">${html}</span>`); }
   };
 
-  const handleImageInsert = () => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async (e) => {
-      const target = e.target as HTMLInputElement;
-      if (target.files && target.files.length > 0) {
-        const file = target.files[0];
-        try {
-          toast({
+  const processAndInsertImage = async (file: File) => {
+    try {
+        toast({
             title: "Optimizing & uploading...",
             description: "Your image is being prepared and uploaded.",
-          });
-          const resizedBlob = await resizeImage(file);
-          
-          const formData = new FormData();
-          formData.append('image', resizedBlob, file.name);
+        });
+        const resizedBlob = await resizeImage(file);
 
-          const { url, error } = await uploadImage(formData);
-          
-          if (error || !url) {
+        const formData = new FormData();
+        formData.append('image', resizedBlob, file.name);
+
+        const { url, error } = await uploadImage(formData);
+
+        if (error || !url) {
             throw new Error(error || "Image URL not returned from server.");
-          }
+        }
+        
+        insertImageIntoEditor(url);
 
-          const imageHtml = `<p style="text-align: left;"><img src="${url}" style="max-width: 100%; height: auto; display: inline-block;" /></p><p><br></p>`;
-          applyFormat('insertHTML', imageHtml);
-          toast({
+        toast({
             title: "Image Uploaded",
             description: "Your image has been added to the editor.",
-          });
-        } catch (error: any) {
-          console.error("Image upload failed:", error);
-          toast({
+        });
+    } catch (error: any) {
+        console.error("Image upload failed:", error);
+        toast({
             variant: "destructive",
             title: "Image Error",
             description: error.message || "Could not upload the image.",
-          });
-        }
-      }
-    };
-    input.click();
+        });
+    }
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const target = e.target as HTMLInputElement;
+    if (target.files && target.files.length > 0) {
+        const file = target.files[0];
+        await processAndInsertImage(file);
+    }
   };
+
+  const insertImageIntoEditor = (url: string) => {
+    const imageHtml = `<p style="text-align: left;"><img src="${url}" style="max-width: 100%; height: auto; display: inline-block;" /></p><p><br></p>`;
+    applyFormat('insertHTML', imageHtml);
+    setIsImageDialogOpen(false);
+  }
   
   const handleInsertDivider = (height: number, color: string) => {
     applyFormat("insertHTML", `<hr style="height: ${height}px; width: 70%; margin: 16px auto; background-color: ${color}; border: 0;" /><p><br></p>`);
@@ -936,7 +993,38 @@ export default function NewCampaignPage() {
                                         </div>
                                     </PopoverContent>
                                 </Popover>
-                                <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8" onClick={handleImageInsert}><ImageIcon className="h-4 w-4" /></Button>
+                                 <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button variant="outline" size="icon" type="button" title="Insert Image" className="h-8 w-8"><ImageIcon className="h-4 w-4" /></Button>
+                                    </DialogTrigger>
+                                    <DialogContent className="max-w-4xl">
+                                        <DialogHeader>
+                                            <DialogTitle>Insert Image</DialogTitle>
+                                            <DialogDescription>Upload a new image or select one from your library.</DialogDescription>
+                                        </DialogHeader>
+                                        <Tabs defaultValue="library">
+                                            <TabsList className="grid w-full grid-cols-2">
+                                                <TabsTrigger value="library">Select from Library</TabsTrigger>
+                                                <TabsTrigger value="upload">Upload New</TabsTrigger>
+                                            </TabsList>
+                                            <TabsContent value="library" className="py-4">
+                                                <ImageLibrary onSelect={insertImageIntoEditor} />
+                                            </TabsContent>
+                                            <TabsContent value="upload" className="py-4">
+                                                 <div className="flex items-center justify-center w-full">
+                                                    <label htmlFor="image-upload" className="flex flex-col items-center justify-center w-full h-64 border-2 border-dashed rounded-lg cursor-pointer bg-secondary hover:bg-muted">
+                                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                            <Upload className="w-10 h-10 mb-3 text-muted-foreground" />
+                                                            <p className="mb-2 text-sm text-muted-foreground"><span className="font-semibold">Click to upload</span> or drag and drop</p>
+                                                            <p className="text-xs text-muted-foreground">PNG, JPG or GIF (max. 1080x1920px)</p>
+                                                        </div>
+                                                        <Input id="image-upload" type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                                    </label>
+                                                </div> 
+                                            </TabsContent>
+                                        </Tabs>
+                                    </DialogContent>
+                                </Dialog>
                                 <Popover>
                                     <PopoverTrigger asChild><Button variant="outline" size="icon" type="button" title="Insert Horizontal Rule" className="h-8 w-8"><Minus className="h-4 w-4" /></Button></PopoverTrigger>
                                     <PopoverContent align="start" className="w-auto p-2">
