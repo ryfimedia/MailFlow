@@ -49,8 +49,7 @@ const storage = admin.storage();
 export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) => {
     logger.log("Starting unused image cleanup task.");
 
-    const BUCKET_NAME = process.env.GCLOUD_PROJECT + ".appspot.com";
-    const bucket = storage.bucket(BUCKET_NAME);
+    const bucket = storage.bucket();
 
     // 1. Get all campaigns updated in the last 365 days.
     const oneYearAgo = new Date();
