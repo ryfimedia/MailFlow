@@ -1,7 +1,11 @@
 
-import * as functions from "firebase-functions/v1";
+import { onSchedule } from "firebase-functions/v2/scheduler";
+import { logger, setGlobalOptions } from "firebase-functions/v2";
 import * as admin from "firebase-admin";
 import { Resend } from "resend";
+
+// Set the region for all functions in this file.
+setGlobalOptions({ region: "us-central1" });
 
 // Type definitions for Firestore documents.
 // These are simplified versions of the types in the main app (src/lib/types.ts)
@@ -23,6 +27,7 @@ type DripCampaign = {
 };
 
 type Contact = {
+    id: string;
     email: string;
     firstName?: string;
     lastName?: string;
@@ -41,10 +46,8 @@ const storage = admin.storage();
  * It checks for images in the 'campaign-images/' folder that are older
  * than 365 days and are not referenced in any campaign from the last year.
  */
-export const cleanupUnusedImages = functions.pubsub
-  .schedule("every 24 hours")
-  .onRun(async (context) => {
-    functions.logger.log("Starting unused image cleanup task.");
+export const cleanupUnusedImages = onSchedule("every 24 hours", async (event) => {
+    logger.log("Starting unused image cleanup task.");
 
     const BUCKET_NAME = process.env.GCLOUD_PROJECT + ".appspot.com";
     const bucket = storage.bucket(BUCKET_NAME);
@@ -75,7 +78,7 @@ export const cleanupUnusedImages = functions.pubsub
       }
     });
 
-    functions.logger.log(`Found ${usedImageUrls.size} unique image URLs used in recent campaigns.`);
+    logger.log(`Found ${usedImageUrls.size} unique image URLs used in recent campaigns.`);
 
     // 3. Get all files from the storage bucket.
     const [files] = await bucket.getFiles({ prefix: "campaign-images/" });
@@ -97,16 +100,16 @@ export const cleanupUnusedImages = functions.pubsub
         if (!usedImageUrls.has(file.publicUrl())) {
           try {
             await file.delete();
-            functions.logger.log(`Deleted unused image: ${file.name}`);
+            logger.log(`Deleted unused image: ${file.name}`);
             deletedCount++;
           } catch (error) {
-            functions.logger.error(`Failed to delete ${file.name}:`, error);
+            logger.error(`Failed to delete ${file.name}:`, error as any);
           }
         }
       }
     }
     
-    functions.logger.log(`Cleanup complete. Deleted ${deletedCount} unused images.`);
+    logger.log(`Cleanup complete. Deleted ${deletedCount} unused images.`);
     return null;
   });
 
@@ -115,14 +118,12 @@ export const cleanupUnusedImages = functions.pubsub
  * It checks each subscribed contact against each campaign's email sequence
  * and sends the appropriate email based on the number of days since they subscribed.
  */
-export const processDripCampaigns = functions.pubsub
-  .schedule("every 24 hours")
-  .onRun(async (context) => {
-    functions.logger.log("Starting drip campaign processing task.");
+export const processDripCampaigns = onSchedule("every 24 hours", async (event) => {
+    logger.log("Starting drip campaign processing task.");
 
     const resendApiKey = process.env.RESEND_API_KEY;
     if (!resendApiKey) {
-        functions.logger.error("Resend API key is not set in environment variables. Aborting drip campaign processing.");
+        logger.error("Resend API key is not set in environment variables. Aborting drip campaign processing.");
         return null;
     }
     const resend = new Resend(resendApiKey);
@@ -135,25 +136,13 @@ export const processDripCampaigns = functions.pubsub
     const companyName = settings.profile?.companyName || "Your Company Name";
     const companyAddress = settings.profile?.address || "Your Physical Address";
 
-    const footer = `
-        <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
-            <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
-            <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
-            <p style="margin: 0;">
-                <a href="#unsubscribe-list" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
-                <span style="padding: 0 5px;">|</span>
-                <a href="#unsubscribe-all" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
-            </p>
-        </div>
-    `;
-
     const activeDripCampaigns = await db
       .collection("dripCampaigns")
       .where("status", "==", "Active")
       .get();
 
     if (activeDripCampaigns.empty) {
-      functions.logger.log("No active drip campaigns found.");
+      logger.log("No active drip campaigns found.");
       return null;
     }
 
@@ -164,11 +153,11 @@ export const processDripCampaigns = functions.pubsub
       const emails = campaign.emails || [];
 
       if (!listId || emails.length === 0) {
-        functions.logger.warn(`Campaign "${campaignName}" (ID: ${campaignDoc.id}) is invalid or has no emails, skipping.`);
+        logger.warn(`Campaign "${campaignName}" (ID: ${campaignDoc.id}) is invalid or has no emails, skipping.`);
         continue;
       }
       
-      functions.logger.log(`Processing campaign: "${campaignName}" for list ID: ${listId}`);
+      logger.log(`Processing campaign: "${campaignName}" for list ID: ${listId}`);
 
       const contactsSnapshot = await db
         .collection("contacts")
@@ -177,12 +166,12 @@ export const processDripCampaigns = functions.pubsub
         .get();
 
       if (contactsSnapshot.empty) {
-        functions.logger.log(`No subscribed contacts found for list ${listId} in campaign "${campaignName}".`);
+        logger.log(`No subscribed contacts found for list ${listId} in campaign "${campaignName}".`);
         continue;
       }
 
       for (const contactDoc of contactsSnapshot.docs) {
-        const contact = contactDoc.data() as Contact;
+        const contact = { ...contactDoc.data(), id: contactDoc.id } as Contact;
         
         try {
           const subscribedDate = new Date(contact.subscribedAt);
@@ -197,29 +186,44 @@ export const processDripCampaigns = functions.pubsub
           const emailToSend = emails.find((e) => e.delayDays === daysSinceSubscription);
 
           if (emailToSend) {
-            functions.logger.log(`Matched day ${daysSinceSubscription} for ${contact.email} in campaign "${campaignName}". Preparing to send.`);
+            logger.log(`Matched day ${daysSinceSubscription} for ${contact.email} in campaign "${campaignName}". Preparing to send.`);
             
             let personalizedBody = emailToSend.body
               .replace(/\[FirstName\]/g, contact.firstName || '')
               .replace(/\[LastName\]/g, contact.lastName || '')
               .replace(/\[Email\]/g, contact.email || '');
 
+            const listUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&listId=${listId}`;
+            const allUnsubscribeUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/unsubscribe?contactId=${contact.id}&all=true`;
+                
+            const footer = `
+                <div style="text-align: center; font-family: sans-serif; font-size: 12px; color: #888888; padding: 20px 0; margin-top: 20px; border-top: 1px solid #eaeaea;">
+                    <p style="margin: 0 0 5px 0;">Copyright © ${new Date().getFullYear()} ${companyName}, All rights reserved.</p>
+                    <p style="margin: 0 0 10px 0;">Our mailing address is: ${companyAddress}</p>
+                    <p style="margin: 0;">
+                        <a href="${listUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from this list</a>
+                        <span style="padding: 0 5px;">|</span>
+                        <a href="${allUnsubscribeUrl}" style="color: #888888; text-decoration: underline;">Unsubscribe from all mailings</a>
+                    </p>
+                </div>
+            `;
+            
             const fullHtml = personalizedBody + footer;
 
             await resend.emails.send({
               from: `${fromName} <${fromEmail}>`,
-              to: contact.email,
+              to: [contact.email],
               subject: emailToSend.subject,
               html: fullHtml,
             });
-            functions.logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
+            logger.log(`Successfully sent email to ${contact.email} for campaign "${campaignName}".`);
           }
         } catch (error) {
-          functions.logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error);
+          logger.error(`Error processing contact ${contact.email} for campaign "${campaignName}"`, error as any);
         }
       }
     }
     
-    functions.logger.log("Drip campaign processing finished.");
+    logger.log("Drip campaign processing finished.");
     return null;
   });
