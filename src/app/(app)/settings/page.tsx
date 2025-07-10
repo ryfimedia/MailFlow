@@ -21,11 +21,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from '@/components/ui/textarea';
-import { getSettings, saveSettings, sendVerificationEmail, verifyEmailCode } from '@/lib/actions';
-import type { Settings } from '@/lib/types';
+import { getSettings, saveSettings } from '@/lib/actions';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSettings as useSettingsContext } from '@/contexts/settings-context';
-import { Loader2 } from 'lucide-react';
 
 const profileFormSchema = z.object({
   companyName: z.string().min(2, "Company name must be at least 2 characters."),
@@ -43,22 +41,14 @@ const apiFormSchema = z.object({
     }),
 });
 
-const verificationFormSchema = z.object({
-    code: z.string().length(6, "The verification code must be 6 digits."),
-})
-
 type ProfileFormValues = z.infer<typeof profileFormSchema>;
 type DefaultsFormValues = z.infer<typeof defaultsFormSchema>;
 type ApiFormValues = z.infer<typeof apiFormSchema>;
-type VerificationFormValues = z.infer<typeof verificationFormSchema>;
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const { settings, loading, reloadSettings } = useSettingsContext();
   
-  const [isVerifying, setIsVerifying] = React.useState(false);
-  const [isResending, setIsResending] = React.useState(false);
-
   const profileForm = useForm<ProfileFormValues>({
     resolver: zodResolver(profileFormSchema),
     mode: "onChange",
@@ -71,11 +61,6 @@ export default function SettingsPage() {
 
   const apiForm = useForm<ApiFormValues>({
     resolver: zodResolver(apiFormSchema),
-    mode: "onChange",
-  });
-
-  const verificationForm = useForm<VerificationFormValues>({
-    resolver: zodResolver(verificationFormSchema),
     mode: "onChange",
   });
 
@@ -97,50 +82,17 @@ export default function SettingsPage() {
   
   const handleSave = async (formName: 'profile' | 'defaults' | 'api', data: any) => {
     try {
-      const result = await saveSettings(formName, data);
+      await saveSettings(formName, data);
       
-      if (result?.needsVerification) {
-        toast({
-          title: "Verification Required",
-          description: `We've sent a verification code to ${data.fromEmail}. Please check your inbox.`,
-        });
-      } else {
-        toast({
-          title: "Settings Saved",
-          description: `Your ${formName} settings have been updated successfully.`,
-        });
-      }
+      toast({
+        title: "Settings Saved",
+        description: `Your ${formName} settings have been updated successfully.`,
+      });
       reloadSettings();
 
     } catch (error: any) {
        console.error("Failed to save settings:", error);
        toast({ variant: "destructive", title: "Error", description: error.message || "Could not save settings." });
-    }
-  };
-
-  const handleVerifyCode = async (data: VerificationFormValues) => {
-    setIsVerifying(true);
-    try {
-        await verifyEmailCode(data.code);
-        toast({ title: "Email Verified!", description: "You can now send campaigns from this address." });
-        reloadSettings();
-        verificationForm.reset();
-    } catch (error: any) {
-        toast({ variant: "destructive", title: "Verification Failed", description: error.message });
-    } finally {
-        setIsVerifying(false);
-    }
-  };
-  
-  const handleResendCode = async () => {
-    setIsResending(true);
-    try {
-        await sendVerificationEmail();
-        toast({ title: "Code Sent", description: "A new verification code has been sent to your email." });
-    } catch (error: any) {
-        toast({ variant: "destructive", title: "Failed to Send Code", description: error.message });
-    } finally {
-        setIsResending(false);
     }
   };
   
@@ -154,52 +106,10 @@ export default function SettingsPage() {
     )
   }
 
-  const showVerification = settings?.defaults?.fromEmail && !settings.defaults.isVerified;
-
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold font-headline">Settings</h1>
       
-      {showVerification && (
-        <Card className="border-accent">
-            <Form {...verificationForm}>
-                <form onSubmit={verificationForm.handleSubmit(handleVerifyCode)}>
-                    <CardHeader>
-                        <CardTitle>Verify Your "From" Email</CardTitle>
-                        <CardDescription>
-                            A verification code was sent to <span className='font-semibold'>{settings.defaults?.fromEmail}</span>. Please enter it below. Codes expire in 24 hours.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                         <FormField
-                            control={verificationForm.control}
-                            name="code"
-                            render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Verification Code</FormLabel>
-                                <FormControl>
-                                <Input placeholder="123456" {...field} className="max-w-xs" />
-                                </FormControl>
-                                <FormMessage />
-                            </FormItem>
-                            )}
-                        />
-                    </CardContent>
-                    <CardFooter className="border-t px-6 py-4 justify-between">
-                        <Button type="submit" disabled={isVerifying}>
-                            {isVerifying && <Loader2 className='animate-spin mr-2' />}
-                            Verify Email
-                        </Button>
-                        <Button type="button" variant="secondary" onClick={handleResendCode} disabled={isResending}>
-                           {isResending && <Loader2 className='animate-spin mr-2' />}
-                            Resend Code
-                        </Button>
-                    </CardFooter>
-                </form>
-            </Form>
-        </Card>
-      )}
-
       <Tabs defaultValue="profile" className="w-full">
         <TabsList className="grid w-full grid-cols-3 md:w-[600px]">
           <TabsTrigger value="profile">Profile & From</TabsTrigger>
@@ -290,7 +200,7 @@ export default function SettingsPage() {
                           <Input placeholder="hello@yourcompany.com" {...field} />
                         </FormControl>
                         <FormDescription>
-                            If you change this, you will need to re-verify the new address.
+                            Your domain must be verified with Resend for emails to be delivered.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

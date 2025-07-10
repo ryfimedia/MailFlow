@@ -1,4 +1,2 @@
-// This page is no longer used. Authentication is now handled on the landing page.
-export default function LoginPage() {
-  return null;
-}
+// This file is intentionally left blank to resolve a routing conflict.
+// The login page is no longer used.

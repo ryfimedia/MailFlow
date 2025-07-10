@@ -268,30 +268,6 @@ export async function deleteTemplate(id: string) {
 
 // ==== CONTACTS & LISTS ====
 
-export async function createContactForNewUser(data: {
-    uid: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    phone?: string;
-    company?: string;
-}) {
-    const allContactsListDoc = await adminDb.collection('lists').doc('all').get();
-    if (!allContactsListDoc.exists) {
-        await adminDb.collection('lists').doc('all').set({ name: 'All Contacts', isSystemList: true, isMasterList: true, count: 0, createdAt: FieldValue.serverTimestamp() });
-    }
-
-    const newContactRef = adminDb.collection('contacts').doc(); // Auto-generate ID
-    await newContactRef.set({
-        ...data,
-        status: 'Subscribed',
-        subscribedAt: new Date().toISOString(),
-        listIds: ['all'], // Add to 'all' contacts list by default
-    });
-
-    await updateAllListCounts();
-}
-
 export async function getContactLists(): Promise<ContactList[]> {
     const listsCollection = adminDb.collection('lists');
     const contactsCollection = adminDb.collection('contacts');
@@ -560,21 +536,6 @@ export async function getSettings(): Promise<Settings> {
 export async function saveSettings(formName: 'profile' | 'defaults' | 'api', data: any) {
     const settingsDocRef = adminDb.collection('meta').doc('settings');
 
-    if (formName === 'defaults') {
-        const oldSettings = await getSettings();
-        const oldEmail = oldSettings.defaults?.fromEmail;
-        const newEmail = data.fromEmail;
-
-        if (oldEmail !== newEmail) {
-            if (!oldSettings.api?.resendApiKey) {
-                throw new Error("You must set your Resend API key before you can verify a new email address.");
-            }
-            await settingsDocRef.set({ defaults: { ...data, isVerified: false }}, { merge: true });
-            await sendVerificationEmail(newEmail, oldSettings.api.resendApiKey);
-            return { needsVerification: true };
-        }
-    }
-
     if (formName === 'profile') {
         await settingsDocRef.set({ profile: {
             companyName: data.companyName,
@@ -587,73 +548,6 @@ export async function saveSettings(formName: 'profile' | 'defaults' | 'api', dat
     
     await settingsDocRef.set({ [formName]: data }, { merge: true });
 }
-
-export async function sendVerificationEmail(email?: string, apiKey?: string) {
-    let settings: Settings;
-    if (!email || !apiKey) {
-      settings = await getSettings();
-      email = email || settings.defaults?.fromEmail;
-      apiKey = apiKey || settings.api?.resendApiKey;
-    }
-
-    if (!email) throw new Error("No email address set to verify.");
-    if (!apiKey) throw new Error("Resend API Key is not set.");
-    
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expires = new Date();
-    expires.setHours(expires.getHours() + 24);
-    
-    await adminDb.collection('meta').doc('settings').set({
-        defaults: {
-            verificationCode: code,
-            verificationCodeExpires: expires.toISOString(),
-        }
-    }, { merge: true });
-
-    const resend = new Resend(apiKey);
-    await resend.emails.send({
-        from: 'Ryfi MailFlow <verification@ryfi.me>',
-        to: email,
-        subject: 'Verify Your Ryfi MailFlow Email Address',
-        html: `
-            <div style="font-family: sans-serif; text-align: center; padding: 20px;">
-                <h2>Email Verification</h2>
-                <p>Your verification code is:</p>
-                <p style="font-size: 24px; font-weight: bold; letter-spacing: 2px; margin: 20px 0;">${code}</p>
-                <p>This code will expire in 24 hours.</p>
-            </div>
-        `
-    });
-}
-
-export async function verifyEmailCode(code: string): Promise<{success: boolean}> {
-    const settings = await getSettings();
-    const storedCode = settings.defaults?.verificationCode;
-    const expiresStr = settings.defaults?.verificationCodeExpires;
-
-    if (!storedCode || !expiresStr) {
-        throw new Error("No verification process was started. Please request a new code.");
-    }
-
-    if (new Date(expiresStr) < new Date()) {
-        throw new Error("Verification code has expired. Please request a new one.");
-    }
-
-    if (code !== storedCode) {
-        throw new Error("Invalid verification code. Please try again.");
-    }
-
-    await adminDb.collection('meta').doc('settings').set({
-        defaults: {
-            isVerified: true,
-            verificationCode: FieldValue.delete(),
-            verificationCodeExpires: FieldValue.delete()
-        }
-    }, { merge: true });
-    
-    return { success: true };
-}
-
 
 // ==== DASHBOARD & HELPERS ====
 

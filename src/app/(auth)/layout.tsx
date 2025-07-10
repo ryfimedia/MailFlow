@@ -1,12 +1,2 @@
-'use client';
-
-import React from 'react';
-
-// This layout is now simplified as the auth pages are integrated into the landing page.
-export default function AuthLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return <>{children}</>;
-}
+// This file is intentionally left blank to resolve a routing conflict.
+// The (auth) route group is no longer used.

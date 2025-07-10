@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   SidebarProvider,
   Sidebar,
@@ -11,7 +11,6 @@ import {
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
-  SidebarFooter,
   SidebarTrigger,
   SidebarInset,
 } from "@/components/ui/sidebar";
@@ -25,11 +24,9 @@ import {
   PlusCircle,
   LayoutTemplate,
   Image,
-  LogOut,
 } from "lucide-react";
 import { SettingsProvider, useSettings } from "@/contexts/settings-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useAuth } from "@/contexts/auth-context";
 import React from "react";
 
 function SetupBanner() {
@@ -52,34 +49,12 @@ function SetupBanner() {
     );
 }
 
-function AuthWrapper({ children }: { children: React.ReactNode }) {
-    const { currentUser, loading } = useAuth();
-    const router = useRouter();
-
-    React.useEffect(() => {
-        if (!loading && !currentUser) {
-            router.push('/');
-        }
-    }, [currentUser, loading, router]);
-
-    if (loading || !currentUser) {
-        return (
-            <div className="flex h-screen w-full items-center justify-center">
-                <Rocket className="w-12 h-12 animate-pulse" />
-            </div>
-        );
-    }
-    return <>{children}</>;
-}
-
-
 export default function AppLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { currentUser, logout } = useAuth();
 
   const menuItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -91,7 +66,6 @@ export default function AppLayout({
   ];
 
   return (
-    <AuthWrapper>
       <SidebarProvider>
         <Sidebar>
           <SidebarHeader>
@@ -132,16 +106,6 @@ export default function AppLayout({
               ))}
             </SidebarMenu>
           </SidebarContent>
-          <SidebarFooter className="flex-col !items-start gap-2 p-4">
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold">User</span>
-              <span className="text-xs text-muted-foreground truncate">{currentUser?.email}</span>
-            </div>
-            <Button variant="ghost" size="sm" onClick={logout} className="w-full justify-start -ml-2">
-                <LogOut className="mr-2" />
-                Logout
-            </Button>
-          </SidebarFooter>
         </Sidebar>
         <SettingsProvider>
           <SidebarInset>
@@ -156,6 +120,5 @@ export default function AppLayout({
           </SidebarInset>
         </SettingsProvider>
       </SidebarProvider>
-    </AuthWrapper>
   );
 }

@@ -23,7 +23,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     return !!(
       settings.api?.resendApiKey &&
       settings.defaults?.fromEmail &&
-      settings.defaults?.isVerified &&
+      settings.defaults?.isVerified && // This is now controlled by Resend domain verification
       settings.defaults?.fromName &&
       settings.profile?.companyName &&
       settings.profile?.address
